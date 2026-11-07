@@ -1,6 +1,16 @@
 package za.westend.watersplit.ui
 
+import android.Manifest
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
+import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.runtime.DisposableEffect
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -34,6 +44,19 @@ import za.westend.watersplit.engine.TenantBook
 import za.westend.watersplit.engine.TenantSave
 
 const val SETUP_STEPS = 6
+
+/** True when the app may post notifications (always true before Android 13). */
+private fun notificationsGranted(context: Context): Boolean =
+    Build.VERSION.SDK_INT < 33 ||
+        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+
+/** The quiet "skip" link used all through the wizard, so the main button is always the obvious one. */
+@Composable
+private fun SkipButton(text: String, onClick: () -> Unit) {
+    TextButton(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+        Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Normal)
+    }
+}
 
 /** What is typed for one house in step 1, before it is saved. */
 private class TenantForm(open: Tenancy?) {
@@ -81,6 +104,20 @@ fun SetupScreen(
     )
     val now = remember { MonthKey.current() }
     val context = LocalContext.current
+    var notificationsAllowed by remember { mutableStateOf(notificationsGranted(context)) }
+    var notificationsAsked by remember { mutableStateOf(false) }
+    val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        notificationsAllowed = granted || notificationsGranted(context)
+    }
+    // She may come back from Android's notification settings having switched them on.
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    DisposableEffect(lifecycle) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) notificationsAllowed = notificationsGranted(context)
+        }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
+    }
 
     fun saveCurrentTenants(): Boolean {
         problem = null
@@ -128,7 +165,7 @@ fun SetupScreen(
         when (step) {
             0 -> {
                 Text(
-                    "Water Splitter updates itself from the internet. For that, Android needs your OK to let this app install its own updates.",
+                    "Two quick permissions. Water Splitter updates itself from the internet, and it can remind you when the invoice is due.",
                     style = MaterialTheme.typography.bodyLarge,
                 )
                 Panel {
@@ -136,6 +173,7 @@ fun SetupScreen(
                     if (Updater.installAllowed) {
                         Text("✓ Updates are allowed.", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
                     } else {
+                        Text("Android needs your OK to let this app install its own updates.")
                         Text("1. Tap the button below.")
                         Text("2. Switch on \"Allow from this source\".")
                         Text("3. Press Back to return here.")
@@ -145,18 +183,44 @@ fun SetupScreen(
                         ) { Text("Allow updates") }
                     }
                 }
-                if (!Updater.installAllowed) {
+                Panel {
+                    SectionTitle("Allow notifications")
+                    if (notificationsAllowed) {
+                        Text("✓ Notifications are allowed.", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                    } else {
+                        Text("So the app can remind you when the municipal invoice should have arrived.")
+                        Button(
+                            onClick = {
+                                if (notificationsAsked) {
+                                    // Android no longer shows its own question after a refusal: send her to the settings page.
+                                    context.startActivity(
+                                        Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                                            .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                                    )
+                                } else {
+                                    notificationsAsked = true
+                                    askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text(if (notificationsAsked) "Open notification settings" else "Allow notifications") }
+                    }
+                }
+                val allDone = Updater.installAllowed && notificationsAllowed
+                if (allDone) {
+                    Button(onClick = { onStep(1) }, modifier = Modifier.fillMaxWidth().height(56.dp)) {
+                        Text("Next", style = MaterialTheme.typography.titleMedium)
+                    }
+                } else {
+                    SkipButton("Skip for now") { onStep(1) }
                     Text(
-                        "You can skip this now. A reminder stays at the top of the main screen until it is allowed.",
+                        "A reminder stays at the top of the main screen until updates are allowed.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                Button(onClick = { onStep(1) }, modifier = Modifier.fillMaxWidth().height(56.dp)) {
-                    Text(if (Updater.installAllowed) "Next" else "Skip for now", style = MaterialTheme.typography.titleMedium)
-                }
             }
-
             1 -> {
                 Text(
                     "Moving from another phone? If you saved a backup there (Settings, App Settings, Backup), put it back here and skip " +
@@ -168,9 +232,7 @@ fun SetupScreen(
                     Button(onClick = restore, modifier = Modifier.fillMaxWidth()) { Text("Restore from a backup") }
                     restoreMessage?.let { Text(it, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold) }
                 }
-                OutlinedButton(onClick = { onStep(2) }, modifier = Modifier.fillMaxWidth().height(56.dp)) {
-                    Text("I don't have a backup", style = MaterialTheme.typography.titleMedium)
-                }
+                SkipButton("I don't have a backup") { onStep(2) }
             }
 
             2 -> {
@@ -289,9 +351,7 @@ fun SetupScreen(
         }
 
         if (step in 3..4) {
-            TextButton(onClick = { onStep(step + 1) }, modifier = Modifier.fillMaxWidth()) {
-                Text("Skip this step", fontWeight = FontWeight.Normal)
-            }
+            SkipButton("Skip this step") { onStep(step + 1) }
         }
     }
 }
