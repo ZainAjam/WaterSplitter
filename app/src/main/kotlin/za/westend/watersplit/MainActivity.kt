@@ -25,6 +25,7 @@ class MainActivity : ComponentActivity() {
         val store = Store(applicationContext)
         ReaderService.init(applicationContext)
         ReminderScheduler.apply(applicationContext, store.settings.remindersOn)
+        Updater.refreshPermission(applicationContext)
         Updater.checkIfDue(applicationContext)
         Incoming.cleanUp(applicationContext)
         // A recreated activity gets the same intent again; only a fresh start should file the shared files.

@@ -21,6 +21,7 @@ import za.westend.watersplit.data.Store
 import za.westend.watersplit.engine.House
 import za.westend.watersplit.share.ShareInbox
 import za.westend.watersplit.share.ShareSheet
+import za.westend.watersplit.update.Updater
 import za.westend.watersplit.share.StatementImage
 
 sealed interface Screen {
@@ -81,6 +82,9 @@ fun AppRoot(store: Store, inbox: ShareInbox) {
                     },
                     onCancel = { dropIncoming(deleteFile = true) },
                 )
+            } else if (Updater.isConfigured && !Updater.installAllowed && !Updater.permissionAsked) {
+                // First start after installing: ask for permission to install updates before anything else (even a backup restore).
+                InstallPermissionScreen()
             } else {
                 when (val s = screen) {
                     Screen.Home -> if (!store.settings.setupDone) {
