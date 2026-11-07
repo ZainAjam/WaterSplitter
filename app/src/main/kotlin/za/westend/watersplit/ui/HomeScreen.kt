@@ -51,6 +51,23 @@ fun HomeScreen(
         contentPadding = PaddingValues(vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
+        if (Updater.isConfigured && !Updater.installAllowed) {
+            item {
+                Panel(container = MaterialTheme.colorScheme.tertiaryContainer) {
+                    Text("Allow the app to install updates", fontWeight = FontWeight.SemiBold)
+                    InstallPermissionActions()
+                }
+            }
+        }
+        Updater.available?.let { release ->
+            item {
+                Panel(container = MaterialTheme.colorScheme.primaryContainer) {
+                    Text("A new version is available", fontWeight = FontWeight.SemiBold)
+                    Text("Version ${release.version} is ready. Your months and tenants stay as they are.")
+                    UpdateActions()
+                }
+            }
+        }
         item {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(

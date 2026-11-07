@@ -54,7 +54,38 @@ object Updater {
     var lastResult by mutableStateOf<String?>(null)
         private set
 
+    /** 0..1 while the new version is downloading (-1 = size unknown), null when no download is running. */
+    var progress by mutableStateOf<Float?>(null)
+        private set
+
+    /** Why the last download failed (null = fine). */
+    var problem by mutableStateOf<String?>(null)
+        private set
+
+    /** Whether Android lets this app install APKs ("install unknown apps"). Refreshed whenever the app comes to the front. */
+    var installAllowed by mutableStateOf(true)
+        private set
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    fun refreshPermission(context: Context) {
+        installAllowed = canInstall(context)
+    }
+
+    /** Downloads the available version and hands it to Android's installer (which asks the person to confirm). */
+    fun downloadAndInstall(context: Context) {
+        val release = available ?: return
+        if (progress != null) return
+        val app = context.applicationContext
+        problem = null
+        scope.launch {
+            progress = 0f
+            val result = runCatching { withContext(Dispatchers.IO) { download(app, release) { progress = it } } }
+            progress = null
+            result.onSuccess { apk -> withContext(Dispatchers.Main) { install(app, apk) } }
+                .onFailure { problem = (it as? UpdateFailure)?.message ?: "The download didn't work. Please try again." }
+        }
+    }
 
     val isConfigured: Boolean get() = BuildConfig.UPDATE_REPO.isNotBlank()
 

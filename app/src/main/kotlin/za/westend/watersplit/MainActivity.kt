@@ -36,6 +36,13 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        // She may have just switched on "install unknown apps" in Android's settings, or the app was left open for days.
+        Updater.refreshPermission(applicationContext)
+        Updater.checkIfDue(applicationContext)
+    }
+
     /** The app is already open (or in the background) and something else is shared to it. */
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)

@@ -51,11 +51,8 @@ import za.westend.watersplit.reading.ReaderService
 @Composable
 private fun UpdatesPanel() {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var progress by remember { mutableStateOf<Float?>(null) }
-    var problem by remember { mutableStateOf<String?>(null) }
-    var needsPermission by remember { mutableStateOf(false) }
     val release = Updater.available
+    val progress = Updater.progress
 
     Panel {
         SectionTitle("App updates")
@@ -73,44 +70,43 @@ private fun UpdatesPanel() {
             if (release != null) {
                 Text("Version ${release.version} (${Versions.size(release.sizeBytes)})", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
                 if (release.notes.isNotBlank()) Text(release.notes.take(400), style = MaterialTheme.typography.bodySmall)
-                val p = progress
-                if (p != null) {
-                    if (p >= 0f) LinearProgressIndicator(progress = { p }, modifier = Modifier.fillMaxWidth()) else LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                } else {
-                    Button(
-                        onClick = {
-                            problem = null
-                            if (!Updater.canInstall(context)) {
-                                needsPermission = true
-                            } else {
-                                needsPermission = false
-                                scope.launch {
-                                    progress = 0f
-                                    val result = runCatching { withContext(Dispatchers.IO) { Updater.download(context, release) { progress = it } } }
-                                    progress = null
-                                    result.onSuccess { Updater.install(context, it) }
-                                        .onFailure { problem = (it as? UpdateFailure)?.message ?: "The download didn't work. Please try again." }
-                                }
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) { Text("Download and install") }
-                }
+                UpdateActions()
             }
-            if (needsPermission) {
-                Text(
-                    "Android needs your OK first. Tap below, switch on \"Allow from this source\", press Back, then tap Download and install again.",
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                OutlinedButton(onClick = { context.startActivity(Updater.allowInstallIntent(context)) }, modifier = Modifier.fillMaxWidth()) {
-                    Text("Open that setting")
-                }
-            }
-            problem?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            if (!Updater.installAllowed) InstallPermissionActions()
         }
     }
 }
 
+/** "Download and install" (with progress and any problem). Without Android's permission it sends her to that setting instead. */
+@Composable
+fun UpdateActions() {
+    val context = LocalContext.current
+    val progress = Updater.progress
+    if (progress != null) {
+        if (progress >= 0f) LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth()) else LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+    } else {
+        Button(
+            onClick = {
+                if (Updater.installAllowed) Updater.downloadAndInstall(context) else context.startActivity(Updater.allowInstallIntent(context))
+            },
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text(if (Updater.installAllowed) "Download and install" else "Allow installing, then download") }
+    }
+    Updater.problem?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+}
+
+/** Explains Android's "install unknown apps" switch and opens it. */
+@Composable
+fun InstallPermissionActions() {
+    val context = LocalContext.current
+    Text(
+        "Android needs your OK before this app can install its own updates. Tap below, switch on \"Allow from this source\", then press Back.",
+        style = MaterialTheme.typography.bodySmall,
+    )
+    OutlinedButton(onClick = { context.startActivity(Updater.allowInstallIntent(context)) }, modifier = Modifier.fillMaxWidth()) {
+        Text("Allow installing updates")
+    }
+}
 /** A notification when the invoice should have arrived, or when a month is still waiting. */
 @Composable
 fun RemindersPanel(store: Store) {
