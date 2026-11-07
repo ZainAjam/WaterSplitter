@@ -1,0 +1,14 @@
+.gradle/
+build/
+.kotlin/
+local.properties
+*.jks
+*.keystore
+*.apk
+*.aab
+.idea/
+*.iml
+.DS_Store
+
+# Private: the old sheet's rent history stays on the owner's computer and is restored from a backup
+engine/src/test/resources/sheet-history.csv
