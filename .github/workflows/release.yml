@@ -54,3 +54,5 @@ jobs:
         with:
           files: water-split-*.apk
           generate_release_notes: true
+          # Every 0.x version is a prerelease (the app's updater looks at prereleases too).
+          prerelease: ${{ startsWith(github.ref_name, 'v0.') }}

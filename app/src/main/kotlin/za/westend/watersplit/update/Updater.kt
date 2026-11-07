@@ -112,7 +112,7 @@ object Updater {
     }
 
     private fun fetchLatest(context: Context): Release? {
-        val conn = URL("${apiBase(context)}/repos/${BuildConfig.UPDATE_REPO}/releases/latest").openConnection() as HttpURLConnection
+        val conn = URL("${apiBase(context)}/repos/${BuildConfig.UPDATE_REPO}/releases?per_page=10").openConnection() as HttpURLConnection
         try {
             conn.connectTimeout = 15_000
             conn.readTimeout = 20_000
@@ -124,9 +124,13 @@ object Updater {
                 404 -> return null // no release published yet
                 else -> throw UpdateFailure("GitHub answered with error $code. Try again later.")
             }
-            val o = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
-            val assets = o.optJSONArray("assets") ?: return null
-            for (i in 0 until assets.length()) {
+            // The newest published release that carries an APK. Prereleases count too (the "latest" endpoint would skip them).
+            val list = org.json.JSONArray(conn.inputStream.bufferedReader().use { it.readText() })
+            for (r in 0 until list.length()) {
+              val o = list.getJSONObject(r)
+              if (o.optBoolean("draft")) continue
+              val assets = o.optJSONArray("assets") ?: continue
+              for (i in 0 until assets.length()) {
                 val a = assets.getJSONObject(i)
                 val name = a.optString("name")
                 if (!name.endsWith(".apk", ignoreCase = true)) continue
@@ -139,6 +143,7 @@ object Updater {
                     sizeBytes = a.optLong("size", 0L),
                     sha256 = a.optString("digest").takeIf { it.startsWith("sha256:") }?.removePrefix("sha256:"),
                 )
+              }
             }
             return null
         } finally {
