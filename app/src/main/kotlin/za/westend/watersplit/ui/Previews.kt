@@ -19,6 +19,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -131,7 +136,7 @@ fun AttachmentThumb(file: File, mime: String, modifier: Modifier = Modifier, hei
 
 /** Full-screen look at an invoice or meter photo, with zoom buttons so the small print can be read. */
 @Composable
-fun AttachmentViewer(title: String, file: File, mime: String, onClose: () -> Unit) {
+fun AttachmentViewer(title: String, file: File, mime: String, onClose: () -> Unit, onShare: (() -> Unit)? = null) {
     val pages by rememberPages(file, mime, 1600, 6)
     var zoom by remember { mutableFloatStateOf(1f) }
     val screenWidth = LocalConfiguration.current.screenWidthDp.dp - 24.dp
@@ -146,6 +151,13 @@ fun AttachmentViewer(title: String, file: File, mime: String, onClose: () -> Uni
             Text(title, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
             OutlinedButton(onClick = { zoom = (zoom - 0.5f).coerceAtLeast(1f) }) { Text("−") }
             OutlinedButton(onClick = { zoom = (zoom + 0.5f).coerceAtMost(3f) }) { Text("+") }
+        }
+        if (onShare != null) {
+            Button(onClick = onShare, modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
+                Icon(Icons.Filled.Share, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("Share")
+            }
         }
         val list = pages
         when {

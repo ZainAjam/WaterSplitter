@@ -20,6 +20,7 @@ import za.westend.watersplit.data.AttachmentKind
 import za.westend.watersplit.data.Store
 import za.westend.watersplit.engine.House
 import za.westend.watersplit.share.ShareInbox
+import za.westend.watersplit.share.ShareSheet
 import za.westend.watersplit.share.StatementImage
 
 sealed interface Screen {
@@ -193,6 +194,7 @@ fun AppRoot(store: Store, inbox: ShareInbox) {
                                 file = image,
                                 mime = "image/png",
                                 onClose = { screen = Screen.Review(s.key) },
+                                onShare = { ShareSheet.shareImage(context, image, "${s.house.label} statement - ${record?.label ?: ""}") },
                             )
                         } else {
                             LaunchedEffect(s) { screen = Screen.Review(s.key) }
