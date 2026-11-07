@@ -20,6 +20,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import za.westend.watersplit.update.Updater
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -31,7 +33,7 @@ import za.westend.watersplit.engine.Tenancy
 import za.westend.watersplit.engine.TenantBook
 import za.westend.watersplit.engine.TenantSave
 
-const val SETUP_STEPS = 4
+const val SETUP_STEPS = 6
 
 /** What is typed for one house in step 1, before it is saved. */
 private class TenantForm(open: Tenancy?) {
@@ -43,7 +45,7 @@ private class TenantForm(open: Tenancy?) {
 }
 
 /**
- * The first-time wizard: 1 current tenants, 2 earlier tenants (optional), 3 reminders, 4 Claude key.
+ * The first-time wizard: 1 allow updates, 2 restore a backup, 3 current tenants, 4 earlier tenants (optional), 5 reminders, 6 Claude key.
  * The tenants are saved when she presses Next, so going back and forth loses nothing.
  */
 @Composable
@@ -68,11 +70,17 @@ fun SetupScreen(
         onRestored = {
             problem = null
             // The backup brings the tenants, months and settings; the Claude key is never in a backup, so go on to that step.
-            if (store.tenancies.isNotEmpty()) onStep(3) else generation++
+            if (store.tenancies.isNotEmpty()) {
+                onStep(5)
+            } else {
+                generation++
+                onStep(2)
+            }
         },
         onResult = { restoreMessage = it },
     )
     val now = remember { MonthKey.current() }
+    val context = LocalContext.current
 
     fun saveCurrentTenants(): Boolean {
         problem = null
@@ -119,15 +127,53 @@ fun SetupScreen(
 
         when (step) {
             0 -> {
+                Text(
+                    "Water Splitter updates itself from the internet. For that, Android needs your OK to let this app install its own updates.",
+                    style = MaterialTheme.typography.bodyLarge,
+                )
                 Panel {
-                    SectionTitle("Moving from another phone?")
+                    SectionTitle("Allow updates")
+                    if (Updater.installAllowed) {
+                        Text("✓ Updates are allowed.", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                    } else {
+                        Text("1. Tap the button below.")
+                        Text("2. Switch on \"Allow from this source\".")
+                        Text("3. Press Back to return here.")
+                        Button(
+                            onClick = { context.startActivity(Updater.allowInstallIntent(context)) },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text("Allow updates") }
+                    }
+                }
+                if (!Updater.installAllowed) {
                     Text(
-                        "If you saved a backup (Settings, App Settings, Backup) on the old phone, put it back here and skip typing everything in.",
-                        style = MaterialTheme.typography.bodyMedium,
+                        "You can skip this now. A reminder stays at the top of the main screen until it is allowed.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    OutlinedButton(onClick = restore, modifier = Modifier.fillMaxWidth()) { Text("Restore from a backup") }
+                }
+                Button(onClick = { onStep(1) }, modifier = Modifier.fillMaxWidth().height(56.dp)) {
+                    Text(if (Updater.installAllowed) "Next" else "Skip for now", style = MaterialTheme.typography.titleMedium)
+                }
+            }
+
+            1 -> {
+                Text(
+                    "Moving from another phone? If you saved a backup there (Settings, App Settings, Backup), put it back here and skip " +
+                        "typing everything in.",
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+                Panel {
+                    SectionTitle("Restore a backup")
+                    Button(onClick = restore, modifier = Modifier.fillMaxWidth()) { Text("Restore from a backup") }
                     restoreMessage?.let { Text(it, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold) }
                 }
+                OutlinedButton(onClick = { onStep(2) }, modifier = Modifier.fillMaxWidth().height(56.dp)) {
+                    Text("I don't have a backup", style = MaterialTheme.typography.titleMedium)
+                }
+            }
+
+            2 -> {
                 Text(
                     "Who lives in the two houses now? Statements are sent to the WhatsApp number you give here.",
                     style = MaterialTheme.typography.bodyMedium,
@@ -184,12 +230,12 @@ fun SetupScreen(
                 }
                 problem?.let { Panel(container = MaterialTheme.colorScheme.errorContainer) { Text(it, color = MaterialTheme.colorScheme.onErrorContainer) } }
                 Button(
-                    onClick = { if (saveCurrentTenants()) onStep(1) },
+                    onClick = { if (saveCurrentTenants()) onStep(3) },
                     modifier = Modifier.fillMaxWidth().height(56.dp),
                 ) { Text("Next", style = MaterialTheme.typography.titleMedium) }
             }
 
-            1 -> {
+            3 -> {
                 Text(
                     "If you want the earlier months to show who was invoiced, add previous tenants too. This is optional: " +
                         "you can add them any time under Settings, Service Settings, Tenants.",
@@ -208,18 +254,18 @@ fun SetupScreen(
                         }
                     }
                 }
-                Button(onClick = { onStep(2) }, modifier = Modifier.fillMaxWidth().height(56.dp)) {
+                Button(onClick = { onStep(4) }, modifier = Modifier.fillMaxWidth().height(56.dp)) {
                     Text("Next", style = MaterialTheme.typography.titleMedium)
                 }
             }
 
-            2 -> {
+            4 -> {
                 Text(
                     "The municipal invoice arrives by email around the 24th. Choose the day of the month you want a reminder from.",
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 RemindersPanel(store)
-                Button(onClick = { onStep(3) }, modifier = Modifier.fillMaxWidth().height(56.dp)) {
+                Button(onClick = { onStep(5) }, modifier = Modifier.fillMaxWidth().height(56.dp)) {
                     Text("Next", style = MaterialTheme.typography.titleMedium)
                 }
             }
@@ -242,7 +288,7 @@ fun SetupScreen(
             }
         }
 
-        if (step in 1..2) {
+        if (step in 3..4) {
             TextButton(onClick = { onStep(step + 1) }, modifier = Modifier.fillMaxWidth()) {
                 Text("Skip this step", fontWeight = FontWeight.Normal)
             }

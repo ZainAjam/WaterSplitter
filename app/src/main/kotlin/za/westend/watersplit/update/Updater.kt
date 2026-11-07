@@ -68,18 +68,8 @@ object Updater {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-    /** True once she has been shown the first-run "allow updates" screen (kept outside data.json so a restored backup never resets it). */
-    var permissionAsked by mutableStateOf(true)
-        private set
-
     fun refreshPermission(context: Context) {
         installAllowed = canInstall(context)
-        permissionAsked = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean("askedInstallPermission", false)
-    }
-
-    fun markPermissionAsked(context: Context) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean("askedInstallPermission", true).apply()
-        permissionAsked = true
     }
 
     /** Downloads the available version and hands it to Android's installer (which asks the person to confirm). */

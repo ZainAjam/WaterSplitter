@@ -82,9 +82,6 @@ fun AppRoot(store: Store, inbox: ShareInbox) {
                     },
                     onCancel = { dropIncoming(deleteFile = true) },
                 )
-            } else if (Updater.isConfigured && !Updater.installAllowed && !Updater.permissionAsked) {
-                // First start after installing: ask for permission to install updates before anything else (even a backup restore).
-                InstallPermissionScreen()
             } else {
                 when (val s = screen) {
                     Screen.Home -> if (!store.settings.setupDone) {
