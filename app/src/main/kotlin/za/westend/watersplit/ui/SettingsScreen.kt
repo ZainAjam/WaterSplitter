@@ -192,8 +192,6 @@ private fun BackupPanel(store: Store) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var message by remember { mutableStateOf<String?>(null) }
-    var pendingRestore by remember { mutableStateOf<Uri?>(null) }
-
     val stamp = remember { LocalDate.now().toString() }
     val save = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
         if (uri != null) {
@@ -204,11 +202,11 @@ private fun BackupPanel(store: Store) {
                         Backup.write(context, out)
                     }
                 }
-                message = result.fold({ "Backup saved ($it files)." }, { "The backup couldn't be saved. Please try another location." })
+                message = result.fold({ "Backup saved as one file." }, { "The backup couldn't be saved. Please try another location." })
             }
         }
     }
-    val restore = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) pendingRestore = uri }
+    val restore = rememberRestoreFromBackup(store, confirm = true) { message = it }
 
     Panel {
         SectionTitle("Backup")
@@ -218,42 +216,64 @@ private fun BackupPanel(store: Store) {
                 "The Claude key is not included.",
             style = MaterialTheme.typography.bodyMedium,
         )
-        Button(onClick = { save.launch("water-split-backup-$stamp.zip") }, modifier = Modifier.fillMaxWidth()) { Text("Save a backup") }
-        OutlinedButton(
-            onClick = { restore.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream")) },
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text("Restore from a backup") }
+        Button(onClick = { save.launch("water-splitter-backup-$stamp.zip") }, modifier = Modifier.fillMaxWidth()) { Text("Save a backup") }
+        OutlinedButton(onClick = restore, modifier = Modifier.fillMaxWidth()) { Text("Restore from a backup") }
         message?.let { Text(it, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold) }
     }
+}
 
-    pendingRestore?.let { uri ->
+/**
+ * Lets the person pick a backup file and put it back. Returns the function that opens the file picker.
+ * [confirm] asks first (on a phone that already has data); [onResult] gets a sentence to show, and [onRestored] fires on success.
+ */
+@Composable
+fun rememberRestoreFromBackup(
+    store: Store,
+    confirm: Boolean,
+    onRestored: () -> Unit = {},
+    onResult: (String) -> Unit,
+): () -> Unit {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var pending by remember { mutableStateOf<Uri?>(null) }
+
+    fun run(uri: Uri) {
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching { context.contentResolver.openInputStream(uri)!!.use { Backup.restore(context, it) } }
+                    .getOrElse { Backup.RestoreResult.Failed("The file couldn't be opened.") }
+            }
+            when (result) {
+                is Backup.RestoreResult.Done -> {
+                    store.reloadFromDisk()
+                    onResult("Backup restored.")
+                    onRestored()
+                }
+                is Backup.RestoreResult.Failed -> onResult(result.reason)
+            }
+        }
+    }
+
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) if (confirm) pending = uri else run(uri)
+    }
+
+    pending?.let { uri ->
         AlertDialog(
-            onDismissRequest = { pendingRestore = null },
+            onDismissRequest = { pending = null },
             title = { Text("Restore this backup?") },
             text = { Text("Everything on this phone (months, drafts, tenants and attached files) will be replaced with what is in the backup. The current data is set aside first, in case you need it.") },
             confirmButton = {
                 TextButton(onClick = {
-                    pendingRestore = null
-                    scope.launch {
-                        val result = withContext(Dispatchers.IO) {
-                            runCatching { context.contentResolver.openInputStream(uri)!!.use { Backup.restore(context, it) } }
-                                .getOrElse { Backup.RestoreResult.Failed("The file couldn't be opened.") }
-                        }
-                        when (result) {
-                            is Backup.RestoreResult.Done -> {
-                                store.reloadFromDisk()
-                                message = "Restored (${result.files} files)."
-                            }
-                            is Backup.RestoreResult.Failed -> message = result.reason
-                        }
-                    }
+                    pending = null
+                    run(uri)
                 }) { Text("Yes, restore") }
             },
-            dismissButton = { TextButton(onClick = { pendingRestore = null }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { pending = null }) { Text("Cancel") } },
         )
     }
+    return { picker.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream")) }
 }
-
 /** Save, show or remove the Claude API key that lets the app read invoices and meter photos. */
 @Composable
 fun ClaudeKeyPanel(onChanged: () -> Unit = {}) {

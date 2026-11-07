@@ -14,6 +14,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -54,10 +55,23 @@ fun SetupScreen(
     onEditTenancy: (id: String, house: House) -> Unit,
     onFinish: () -> Unit,
 ) {
-    val forms = remember {
+    // Bumped after a backup is restored so the typed-in forms are rebuilt from the restored tenants.
+    var generation by remember { mutableIntStateOf(0) }
+    val forms = remember(generation) {
         House.entries.associateWith { h -> TenantForm(TenantBook.forHouse(store.tenancies, h).firstOrNull { it.to == null }) }
     }
     var problem by remember { mutableStateOf<String?>(null) }
+    var restoreMessage by remember { mutableStateOf<String?>(null) }
+    val restore = rememberRestoreFromBackup(
+        store,
+        confirm = false,
+        onRestored = {
+            problem = null
+            // The backup brings the tenants, months and settings; the Claude key is never in a backup, so go on to that step.
+            if (store.tenancies.isNotEmpty()) onStep(3) else generation++
+        },
+        onResult = { restoreMessage = it },
+    )
     val now = remember { MonthKey.current() }
 
     fun saveCurrentTenants(): Boolean {
@@ -105,6 +119,15 @@ fun SetupScreen(
 
         when (step) {
             0 -> {
+                Panel {
+                    SectionTitle("Moving from another phone?")
+                    Text(
+                        "If you saved a backup (Settings, App Settings, Backup) on the old phone, put it back here and skip typing everything in.",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    OutlinedButton(onClick = restore, modifier = Modifier.fillMaxWidth()) { Text("Restore from a backup") }
+                    restoreMessage?.let { Text(it, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold) }
+                }
                 Text(
                     "Who lives in the two houses now? Statements are sent to the WhatsApp number you give here.",
                     style = MaterialTheme.typography.bodyMedium,

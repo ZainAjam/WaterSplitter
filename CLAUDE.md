@@ -19,6 +19,8 @@ Business rules: `docs/RULES.md`. Read it before touching `Calculator.kt`.
   `BackArrow` icon, never a "Back" word. `Screen` carries its own `back` target (see `AppRoot.parentOf`).
 - First-time wizard (`ui/SetupScreen.kt`, shown while `Settings.setupDone` is false; installs that already have tenants skip it):
   1 current tenants (name + valid WhatsApp number each, or "nobody lives here"), 2 earlier tenants (optional), 3 reminder day, 4 Claude key.
+  Step 1 also offers "Restore from a backup" (`rememberRestoreFromBackup`, shared with Settings -> Backup); after a restore with tenants
+  the wizard jumps to step 4 because the Claude key is never part of a backup. A backup is ONE zip (`water-splitter-backup-<date>.zip`).
 - Month lifecycle: a month is a **Draft** (many at once) until `DraftChecker` (engine) says both the invoice numbers and the
   meter reading are captured; only then "Review & send" unlocks and it becomes a calculated `MonthRecord`. "Edit the numbers"
   turns a month back into a draft. Sharing a file onto a month that is already calculated asks before overwriting it; onto a
