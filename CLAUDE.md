@@ -17,13 +17,12 @@ Business rules: `docs/RULES.md`. Read it before touching `Calculator.kt`.
   drafts and previous months. Cog -> `SettingsScreen` hub -> Tenants, Service Settings (municipal account, meter serial + last reading,
   statement address/name) and App Settings (Claude key, reminders incl. `Settings.reminderDay`, backup, updates). Sub-screens use the
   `BackArrow` icon, never a "Back" word. `Screen` carries its own `back` target (see `AppRoot.parentOf`).
-- First-time wizard (`ui/SetupScreen.kt`, 6 steps, shown while `Settings.setupDone` is false; installs that already have tenants skip it):
-  1 allow installing updates (Android's "install unknown apps" for this app; can be skipped), 2 restore a backup (or "I don't have a backup"),
-  3 current tenants (name + valid WhatsApp number each, or "nobody lives here"), 4 earlier tenants (optional), 5 reminders (day of month),
-  6 Claude key. A restore with tenants jumps to step 6 (the key is never in a backup); without tenants it goes to step 3.
-  A backup is ONE zip (`water-splitter-backup-<date>.zip`); restore is `rememberRestoreFromBackup`, shared with Settings -> Backup.
-  After the wizard, the top of Home shows (a) a banner when the install permission is still missing (`Updater.installAllowed`, refreshed in
-  `MainActivity.onResume`) and (b) a banner when a newer release exists, with "Download and install" (`Updater.downloadAndInstall`).
+- First-time wizard (`ui/SetupScreen.kt`, 7 steps, shown while `Settings.setupDone` is false; installs that already have tenants skip it):
+  1 allow installing updates + notifications (both skippable), 2 restore a backup (or "I don't have a backup"), 3 backup location (choose a folder,
+  or keep the default), 4 current tenants (name + valid WhatsApp number each, or "nobody lives here"), 5 earlier tenants (optional), 6 reminders
+  (day of month), 7 Claude key. A restore that brings tenants back goes 3 -> 7 (the key is never in a backup).
+  A backup is ONE zip; restore is `rememberRestoreFromBackup`, shared with Settings -> Backup. See the "Backup location" and "Home banners" notes
+  below for what Home shows at the top after the wizard (permissions/location banner, then the update banner).
   The updater lists `/releases` (not `/latest`) so prereleases count; every `v0.*` tag is published as a prerelease.
 - Month lifecycle: a month is a **Draft** (many at once) until `DraftChecker` (engine) says both the invoice numbers and the
   meter reading are captured; only then "Review & send" unlocks and it becomes a calculated `MonthRecord`. "Edit the numbers"
