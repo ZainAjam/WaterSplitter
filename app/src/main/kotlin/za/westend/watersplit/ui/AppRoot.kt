@@ -27,6 +27,7 @@ import za.westend.watersplit.share.StatementImage
 sealed interface Screen {
     data object Home : Screen
     data object Settings : Screen
+    data object Help : Screen
     data object ServiceSettings : Screen
     data class AppSettings(val back: Screen = Settings) : Screen
     data class Setup(val step: Int) : Screen
@@ -98,8 +99,10 @@ fun AppRoot(store: Store, inbox: ShareInbox) {
                             onOpenDraft = { screen = Screen.Draft(it) },
                             onOpen = { screen = Screen.Review(it) },
                             onSettings = { screen = Screen.Settings },
+                            onHelp = { screen = Screen.Help },
                         )
                     }
+                    Screen.Help -> HelpScreen(onBack = { screen = Screen.Home })
                     is Screen.Setup -> SetupScreen(
                         store = store,
                         step = s.step,

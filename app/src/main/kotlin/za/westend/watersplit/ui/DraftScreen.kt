@@ -68,6 +68,7 @@ import za.westend.watersplit.engine.Parse
 import za.westend.watersplit.engine.Party
 import za.westend.watersplit.engine.ReadingNote
 import za.westend.watersplit.reading.ReaderService
+import za.westend.watersplit.data.DriveBackup
 import za.westend.watersplit.share.Incoming
 import za.westend.watersplit.share.PickDocumentFrom
 import za.westend.watersplit.share.SourceFiles
@@ -245,6 +246,7 @@ fun DraftScreen(
         ) ?: return
         store.completeDraft(record)
         val app = context.applicationContext
+        DriveBackup.backupAsync(app) // refreshes the Google Drive backup (does nothing until a folder was chosen)
         if (deleteOriginals) {
             // Own scope: this screen is left the moment the month is saved.
             kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
@@ -288,7 +290,7 @@ fun DraftScreen(
             } else {
                 StageBanner(
                     stage = invoiceStage,
-                    waiting = "Waiting for the invoice",
+                    waiting = "The invoice has not been added yet, so do you want to type in the invoice numbers manually?",
                     received = "Invoice received – numbers not filled in yet ($invoiceFilled of ${DraftChecker.INVOICE_FIELDS})",
                     captured = when {
                         invoiceInfo.fromReader && !invoiceInfo.confirmed -> "Read from the invoice – check each number against it"
@@ -375,7 +377,7 @@ fun DraftScreen(
             } else {
                 StageBanner(
                     stage = meterStage,
-                    waiting = "Waiting for the meter photo",
+                    waiting = "The water meter photo has not been added yet, so do you want to type in the reading for this month manually?",
                     received = "Meter photo received – reading not filled in yet",
                     captured = when {
                         meterInfo.fromReader && !meterInfo.confirmed -> "Read from the photo – check it against the photo"

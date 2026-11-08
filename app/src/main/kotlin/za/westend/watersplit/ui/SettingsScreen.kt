@@ -39,6 +39,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import za.westend.watersplit.data.Backup
+import za.westend.watersplit.data.DriveBackup
 import za.westend.watersplit.data.Store
 import za.westend.watersplit.engine.Versions
 import za.westend.watersplit.update.UpdateFailure
@@ -179,6 +180,57 @@ fun RemindersPanel(store: Store) {
             ) { Text("Send a test reminder now") }
         }
         message?.let { Text(it, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold) }
+    }
+}
+
+/**
+ * Backup to a folder called "Water Splitter data backup" in Google Drive after every completed month. [onlyIfSetUp] hides it
+ * once it is working (used on the month page, where it is only a nudge to set it up).
+ */
+@Composable
+fun DriveBackupSection(onlyIfSetUp: Boolean = false) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var problem by remember { mutableStateOf<String?>(null) }
+    val choose = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) {
+            scope.launch {
+                val error = withContext(Dispatchers.IO) { DriveBackup.setUp(context, uri) }
+                problem = error
+                if (error == null) DriveBackup.backupAsync(context)
+            }
+        }
+    }
+    val configured = DriveBackup.configured
+    if (onlyIfSetUp && configured) {
+        if (DriveBackup.summary.isNotBlank()) Text(DriveBackup.summary, style = MaterialTheme.typography.bodySmall)
+        return
+    }
+    Panel {
+        SectionTitle("Backup to Google Drive")
+        if (!configured) {
+            Text(
+                "After every finished month the app can keep a backup of your data in a folder called \"${DriveBackup.FOLDER_NAME}\" " +
+                    "in your Google Drive. If the phone is lost, nothing is lost with it.",
+            )
+            if (context.packageManager.getLaunchIntentForPackage("com.google.android.apps.docs") == null) {
+                Text(
+                    "The Google Drive app isn't installed on this phone. Install \"Google Drive\" from the Play Store and sign in first, " +
+                        "otherwise Drive won't appear in the folder list.",
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+            Text("Tap the button, open the menu at the top left and choose Drive, open My Drive, then tap \"Use this folder\".", style = MaterialTheme.typography.bodySmall)
+            Button(onClick = { choose.launch(null) }, modifier = Modifier.fillMaxWidth()) { Text("Set up Google Drive backup") }
+        } else {
+            Text("✓ Backups go to the \"${DriveBackup.FOLDER_NAME}\" folder in Google Drive.", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+            if (DriveBackup.summary.isNotBlank()) Text(DriveBackup.summary)
+            OutlinedButton(onClick = { DriveBackup.backupAsync(context) }, enabled = !DriveBackup.running, modifier = Modifier.fillMaxWidth()) {
+                Text(if (DriveBackup.running) "Backing up…" else "Back up now")
+            }
+            TextButton(onClick = { choose.launch(null) }, modifier = Modifier.fillMaxWidth()) { Text("Choose a different folder") }
+        }
+        problem?.let { Text(it, color = MaterialTheme.colorScheme.error) }
     }
 }
 
@@ -447,6 +499,7 @@ fun AppSettingsScreen(store: Store, onBack: () -> Unit) {
     ScreenColumn(title = "App Settings", onBack = onBack) {
         ClaudeKeyPanel()
         RemindersPanel(store)
+        DriveBackupSection()
         BackupPanel(store)
         UpdatesPanel()
     }

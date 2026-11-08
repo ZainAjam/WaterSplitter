@@ -6,6 +6,7 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import za.westend.watersplit.data.DriveBackup
 import za.westend.watersplit.data.Store
 import za.westend.watersplit.reading.ReaderService
 import za.westend.watersplit.reminders.ReminderScheduler
@@ -25,6 +26,7 @@ class MainActivity : ComponentActivity() {
         val store = Store(applicationContext)
         ReaderService.init(applicationContext)
         ReminderScheduler.apply(applicationContext, store.settings.remindersOn)
+        DriveBackup.load(applicationContext)
         Updater.refreshPermission(applicationContext)
         Updater.checkIfDue(applicationContext)
         Incoming.cleanUp(applicationContext)

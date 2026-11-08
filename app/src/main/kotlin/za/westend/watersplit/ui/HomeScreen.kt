@@ -20,6 +20,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -42,6 +44,7 @@ fun HomeScreen(
     onOpenDraft: (String) -> Unit,
     onOpen: (String) -> Unit,
     onSettings: () -> Unit,
+    onHelp: () -> Unit,
 ) {
     val months = store.months.asReversed()
     val drafts = store.drafts.asReversed()
@@ -76,6 +79,9 @@ fun HomeScreen(
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f),
                 )
+                IconButton(onClick = onHelp) {
+                    Text("?", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, modifier = Modifier.semantics { contentDescription = "Help" })
+                }
                 IconButton(onClick = onSettings) {
                     // A dot on the cog tells her a new version is waiting (details are under Settings -> App settings).
                     BadgedBox(badge = { if (Updater.available != null) Badge() }) {
