@@ -4,9 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Build
-import android.os.Environment
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -40,19 +38,7 @@ object PermissionStatus {
     var notificationsAllowed by mutableStateOf(true)
         private set
 
-    /** "All files access", which the default backup folder in internal storage needs (Android 11 and newer). */
-    var allFilesAllowed by mutableStateOf(true)
-        private set
-
-    /** Only while backups go to the default folder; a folder she chose herself needs no permission. */
-    fun needsAllFiles(): Boolean = Build.VERSION.SDK_INT >= 30 && !BackupLocation.configured && !allFilesAllowed
-
-    fun allFilesAccessIntent(context: Context): Intent =
-        Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:${context.packageName}"))
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-
     fun refresh(context: Context) {
-        allFilesAllowed = Build.VERSION.SDK_INT < 30 || Environment.isExternalStorageManager()
         notificationsAllowed = Build.VERSION.SDK_INT < 33 ||
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
     }
@@ -83,18 +69,18 @@ fun rememberBackupLocationPicker(onResult: (String?) -> Unit = {}): () -> Unit {
         if (uri != null) {
             scope.launch {
                 val error = withContext(Dispatchers.IO) { BackupLocation.setUp(context, uri) }
-                if (error == null) BackupLocation.backupAsync(context)
                 onResult(error)
             }
         }
     }
-    return { picker.launch(null) }
+    // The folder picker opens in the current backup location; she navigates to the folder that should hold the backups.
+    return { picker.launch(BackupLocation.startUri(context)) }
 }
 
 /** What to do in the picker, in plain words. */
 const val BACKUP_PICKER_HELP =
-    "In the next screen, open the menu at the top left and choose where the backup should live (this phone, Google Drive, OneDrive...). " +
-        "Open or create a folder there, then tap \"Use this folder\" and Allow. The very top of a drive can't be used."
+    "In the next screen, go to the folder where backups should be kept (use the menu at the top left to switch between this phone, Google " +
+        "Drive, OneDrive...), then tap \"Use this folder\" and Allow. The very top of a drive can't be used."
 
 /** The three alert banners' colours: light red (permissions), light orange (settings), light green (updates), with a dark variant. */
 object BannerColors {
@@ -120,8 +106,7 @@ fun PermissionAlertBanner() {
     val context = LocalContext.current
     val needInstall = Updater.isConfigured && !Updater.installAllowed
     val needNotifications = !PermissionStatus.notificationsAllowed
-    val needFiles = PermissionStatus.needsAllFiles()
-    if (!needInstall && !needNotifications && !needFiles) return
+    if (!needInstall && !needNotifications) return
 
     val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         PermissionStatus.refresh(context)
@@ -148,12 +133,6 @@ fun PermissionAlertBanner() {
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("Allow notifications") }
         }
-        if (needFiles) {
-            Text("Let Water Splitter save your backup in ${BackupLocation.DEFAULT_LABEL}.")
-            Button(onClick = { context.startActivity(PermissionStatus.allFilesAccessIntent(context)) }, modifier = Modifier.fillMaxWidth()) {
-                Text("Allow file access for backups")
-            }
-        }
     }
 }
 
@@ -170,8 +149,8 @@ fun SettingsAlertBanner() {
     Panel(container = BannerColors.settings(), contentColor = BannerColors.text()) {
         SectionTitle("Backup location")
         Text(
-            "If you don't choose a location, your backup is saved automatically in ${BackupLocation.DEFAULT_LABEL}. " +
-                "Choose another location, for example Google Drive or OneDrive, to keep it off this phone.",
+            "If you don't choose a location, your backups are kept in ${BackupLocation.DEFAULT_LABEL}. " +
+                "Choose another folder, for example in Google Drive or OneDrive, to keep them somewhere else.",
         )
         Button(onClick = chooseLocation, modifier = Modifier.fillMaxWidth()) { Text("Choose backup location") }
         TextButton(onClick = { BackupLocation.useDefault(context) }, modifier = Modifier.fillMaxWidth()) {

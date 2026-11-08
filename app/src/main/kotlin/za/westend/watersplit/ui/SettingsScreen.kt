@@ -183,15 +183,15 @@ fun RemindersPanel(store: Store) {
     }
 }
 
-/** Save a backup, put one back, and choose where backups go. */
+/** Save a backup, restore one, and change where backups are kept. The pickers open in the backup location. */
 @Composable
 private fun BackupPanel(store: Store) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var message by remember { mutableStateOf<String?>(null) }
     val stamp = remember { LocalDate.now().toString() }
-    // The default way: Android's own Save screen, asked each time.
-    val save = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
+    // Android's Save screen, opened in the backup location (she can still go to another folder).
+    val save = rememberLauncherForActivityResult(SaveBackupDocument()) { uri ->
         if (uri != null) {
             scope.launch {
                 val result = withContext(Dispatchers.IO) {
@@ -210,41 +210,30 @@ private fun BackupPanel(store: Store) {
     Panel {
         SectionTitle("Backup")
         Text(
-            "Your months, tenants and the attached invoices and photos live on this phone. A backup is one file, and the app refreshes " +
-                "it by itself after every finished month. The Claude key is not included.",
+            "Your months, tenants and the attached invoices and photos live on this phone. A backup is one file. The app also refreshes " +
+                "one by itself after every finished month. The Claude key is not included.",
             style = MaterialTheme.typography.bodyMedium,
         )
-        Text("Backups are kept in: ${BackupLocation.where}", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+        Text("Backup location: ${BackupLocation.where}", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
         if (BackupLocation.summary.isNotBlank()) Text(BackupLocation.summary, style = MaterialTheme.typography.bodySmall)
-        if (PermissionStatus.needsAllFiles()) {
-            Text("To save backups there, Android needs your OK first.", color = MaterialTheme.colorScheme.error)
-            OutlinedButton(onClick = { context.startActivity(PermissionStatus.allFilesAccessIntent(context)) }, modifier = Modifier.fillMaxWidth()) {
-                Text("Allow file access for backups")
-            }
-        }
         Button(
             onClick = {
                 message = null
-                BackupLocation.backupAsync(context)
+                save.launch("water-splitter-backup-$stamp.zip")
             },
-            enabled = !BackupLocation.running,
             modifier = Modifier.fillMaxWidth(),
-        ) { Text(if (BackupLocation.running) "Backing up…" else "Save a backup") }
-        OutlinedButton(onClick = { save.launch("water-splitter-backup-$stamp.zip") }, modifier = Modifier.fillMaxWidth()) { Text("Save a copy somewhere else") }
-        OutlinedButton(onClick = restore, modifier = Modifier.fillMaxWidth()) { Text("Restore from a backup") }
-        OutlinedButton(onClick = chooseLocation, modifier = Modifier.fillMaxWidth()) {
-            Text(if (BackupLocation.configured) "Change backup location" else "Choose a backup location")
-        }
+        ) { Text("Save a backup") }
+        OutlinedButton(onClick = restore, modifier = Modifier.fillMaxWidth()) { Text("Restore a backup") }
+        OutlinedButton(onClick = chooseLocation, modifier = Modifier.fillMaxWidth()) { Text("Change backup location") }
         Text(BACKUP_PICKER_HELP, style = MaterialTheme.typography.bodySmall)
         if (BackupLocation.configured) {
             TextButton(onClick = { BackupLocation.useDefault(context) }, modifier = Modifier.fillMaxWidth()) {
-                Text("Use the default location again (Downloads folder)")
+                Text("Use the default location again (Documents folder)")
             }
         }
         message?.let { Text(it, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold) }
     }
 }
-
 /**
  * Lets the person pick a backup file and put it back. Returns the function that opens the file picker.
  * [confirm] asks first (on a phone that already has data); [onResult] gets a sentence to show, and [onRestored] fires on success.
@@ -277,7 +266,7 @@ fun rememberRestoreFromBackup(
         }
     }
 
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+    val picker = rememberLauncherForActivityResult(OpenBackupDocument()) { uri ->
         if (uri != null) if (confirm) pending = uri else run(uri)
     }
 
