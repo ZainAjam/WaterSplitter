@@ -5,9 +5,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import com.google.android.gms.auth.api.identity.Identity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -186,37 +184,23 @@ fun RemindersPanel(store: Store) {
 }
 
 /**
- * Backup to a folder called "Water Splitter data backup" in Google Drive after every completed month, by connecting a Google account
- * once. [onlyIfSetUp] hides it once it is working (used on the month page, where it is only a nudge to set it up).
+ * Backup to a folder called "Water Splitter data backup" in Google Drive after every completed month. [onlyIfSetUp] hides it
+ * once it is working (used on the month page, where it is only a nudge to set it up).
  */
 @Composable
 fun DriveBackupSection(onlyIfSetUp: Boolean = false) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var problem by remember { mutableStateOf<String?>(null) }
-    // Google's own "allow this app to use your Drive?" screen.
-    val consent = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
-        try {
-            val granted = Identity.getAuthorizationClient(context).getAuthorizationResultFromIntent(result.data)
-            problem = null
-            DriveBackup.onConnected(context, granted)
-        } catch (e: Exception) {
-            problem = DriveBackup.explain(e)
+    val choose = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) {
+            scope.launch {
+                val error = withContext(Dispatchers.IO) { DriveBackup.setUp(context, uri) }
+                problem = error
+                if (error == null) DriveBackup.backupAsync(context)
+            }
         }
     }
-    fun connect() {
-        problem = null
-        Identity.getAuthorizationClient(context).authorize(DriveBackup.request())
-            .addOnSuccessListener { r ->
-                val pending = r.pendingIntent
-                if (r.hasResolution() && pending != null) {
-                    consent.launch(IntentSenderRequest.Builder(pending.intentSender).build())
-                } else {
-                    DriveBackup.onConnected(context, r)
-                }
-            }
-            .addOnFailureListener { e -> problem = DriveBackup.explain(e) }
-    }
-
     val configured = DriveBackup.configured
     if (onlyIfSetUp && configured) {
         if (DriveBackup.summary.isNotBlank()) Text(DriveBackup.summary, style = MaterialTheme.typography.bodySmall)
@@ -226,26 +210,30 @@ fun DriveBackupSection(onlyIfSetUp: Boolean = false) {
         SectionTitle("Backup to Google Drive")
         if (!configured) {
             Text(
-                "After every finished month the app keeps a backup of your data in a folder called \"${DriveBackup.FOLDER_NAME}\" " +
-                    "in your Google Drive, so nothing is lost if the phone is lost.",
+                "After every finished month the app can keep a backup of your data in a folder called \"${DriveBackup.FOLDER_NAME}\" " +
+                    "in your Google Drive. If the phone is lost, nothing is lost with it.",
             )
-            Text(
-                "Tap the button and choose your Google account. The app can only see the backup it makes itself, nothing else in your Drive.",
-                style = MaterialTheme.typography.bodySmall,
-            )
-            Button(onClick = { connect() }, modifier = Modifier.fillMaxWidth()) { Text("Connect Google Drive") }
+            if (context.packageManager.getLaunchIntentForPackage("com.google.android.apps.docs") == null) {
+                Text(
+                    "The Google Drive app isn't installed on this phone. Install \"Google Drive\" from the Play Store and sign in first, " +
+                        "otherwise Drive won't appear in the folder list.",
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+            Text("Tap the button, open the menu at the top left and choose Drive, open My Drive, then tap \"Use this folder\".", style = MaterialTheme.typography.bodySmall)
+            Button(onClick = { choose.launch(null) }, modifier = Modifier.fillMaxWidth()) { Text("Set up Google Drive backup") }
         } else {
-            Text("✓ Backups go to the \"${DriveBackup.FOLDER_NAME}\" folder in your Google Drive.", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+            Text("✓ Backups go to the \"${DriveBackup.FOLDER_NAME}\" folder in Google Drive.", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
             if (DriveBackup.summary.isNotBlank()) Text(DriveBackup.summary)
             OutlinedButton(onClick = { DriveBackup.backupAsync(context) }, enabled = !DriveBackup.running, modifier = Modifier.fillMaxWidth()) {
                 Text(if (DriveBackup.running) "Backing up…" else "Back up now")
             }
-            TextButton(onClick = { connect() }, modifier = Modifier.fillMaxWidth()) { Text("Connect Google Drive again") }
-            TextButton(onClick = { DriveBackup.disconnect(context) }, modifier = Modifier.fillMaxWidth()) { Text("Stop backing up to Google Drive") }
+            TextButton(onClick = { choose.launch(null) }, modifier = Modifier.fillMaxWidth()) { Text("Choose a different folder") }
         }
         problem?.let { Text(it, color = MaterialTheme.colorScheme.error) }
     }
 }
+
 /** Save a copy of everything to a file (e.g. in Google Drive), or put such a copy back. */
 @Composable
 private fun BackupPanel(store: Store) {
