@@ -1,9 +1,14 @@
 package za.westend.watersplit.data
 
+import android.content.ContentUris
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
+import android.os.Environment
 import android.provider.DocumentsContract
+import android.provider.MediaStore
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -17,10 +22,10 @@ import java.time.format.DateTimeFormatter
 /**
  * Where backups go.
  *
- * By default (no folder chosen) nothing changes: "Save a backup" opens Android's own Save screen and she chooses each time.
- * She can instead pick a folder once, in Android's folder picker: on the phone, or in any app that offers its storage there
- * (Google Drive, OneDrive...). Then "Save a backup" writes straight into it, and so does the automatic backup after every
- * completed month. One file ("water-splitter-backup.zip", the same zip as always) is kept there and replaced each time.
+ * By default the backup goes into the Downloads folder on this phone ("Download/Water Splitter data backup"), written by the app itself
+ * (no permission needed). She can instead pick a folder once, in Android's folder picker: on the phone, or in any app that offers its
+ * storage there (Google Drive, OneDrive...). Either way "Save a backup" and the automatic backup after every completed month write
+ * ONE file ("water-splitter-backup.zip", the same zip as always) there and replace it each time.
  *
  * The choice lives in this phone's preferences, not in data.json, so a restored backup never points at a folder that isn't there.
  */
@@ -48,6 +53,12 @@ object BackupLocation {
 
     var running by mutableStateOf(false)
         private set
+
+    /** Where the backup goes when no folder was chosen. */
+    const val DEFAULT_LABEL = "the Downloads folder on this phone (Download/$FOLDER_NAME)"
+
+    /** Where backups are going right now, in words. */
+    val where: String get() = if (configured) label else DEFAULT_LABEL
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -107,13 +118,13 @@ object BackupLocation {
         "That folder couldn't be used. Choose or create a folder (not the very top of a drive) and try again."
     }
 
-    /** Writes the backup now (if a folder was chosen). Safe to call from anywhere; it runs in the background. */
+    /** Writes the backup now, to the chosen folder or else the Downloads folder. Safe to call from anywhere; it runs in the background. */
     fun backupAsync(context: Context) {
-        if (!configured || running) return
+        if (running) return
         val app = context.applicationContext
         running = true
         scope.launch {
-            val result = runCatching { backupBlocking(app) }
+            val result = runCatching { if (configured) backupBlocking(app) else backupToDownloadsBlocking(app) }
             val text = result.fold(
                 { "Backed up on " + LocalDateTime.now().format(DateTimeFormatter.ofPattern("d MMM yyyy 'at' HH:mm")) + "." },
                 { "The last backup didn't work (no internet, or the folder was removed?). It is tried again each time a month is completed, or tap Save a backup." },
@@ -122,6 +133,31 @@ object BackupLocation {
             summary = text
             running = false
         }
+    }
+
+    /** The default: Download/Water Splitter data backup/water-splitter-backup.zip, replaced each time. Needs Android 10 or newer. */
+    private fun backupToDownloadsBlocking(context: Context) {
+        check(Build.VERSION.SDK_INT >= 29) { "needs Android 10" }
+        val cr = context.contentResolver
+        val collection = MediaStore.Downloads.EXTERNAL_CONTENT_URI
+        val relative = "${Environment.DIRECTORY_DOWNLOADS}/$FOLDER_NAME/"
+        val existing = cr.query(
+            collection,
+            arrayOf(MediaStore.Downloads._ID),
+            "${MediaStore.Downloads.DISPLAY_NAME} = ? AND ${MediaStore.Downloads.RELATIVE_PATH} = ?",
+            arrayOf(FILE_NAME, relative),
+            null,
+        )?.use { c -> if (c.moveToFirst()) ContentUris.withAppendedId(collection, c.getLong(0)) else null }
+        val target = existing ?: cr.insert(
+            collection,
+            ContentValues().apply {
+                put(MediaStore.Downloads.DISPLAY_NAME, FILE_NAME)
+                put(MediaStore.Downloads.MIME_TYPE, "application/zip")
+                put(MediaStore.Downloads.RELATIVE_PATH, relative)
+            },
+        ) ?: error("can't create the file")
+        val out = cr.openOutputStream(target, "wt") ?: error("can't write")
+        Backup.write(context, out)
     }
 
     private fun backupBlocking(context: Context) {

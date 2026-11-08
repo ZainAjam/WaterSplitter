@@ -85,9 +85,15 @@ fun ScreenColumn(title: String, onBack: (() -> Unit)? = null, content: @Composab
 fun Panel(
     modifier: Modifier = Modifier,
     container: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.surfaceVariant,
+    contentColor: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color.Unspecified,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    Card(modifier = modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = container)) {
+    val colors = if (contentColor == androidx.compose.ui.graphics.Color.Unspecified) {
+        CardDefaults.cardColors(containerColor = container)
+    } else {
+        CardDefaults.cardColors(containerColor = container, contentColor = contentColor)
+    }
+    Card(modifier = modifier.fillMaxWidth(), colors = colors) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { content() }
     }
 }

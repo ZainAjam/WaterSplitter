@@ -54,10 +54,11 @@ fun HomeScreen(
         contentPadding = PaddingValues(vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        item { PermissionsAlertBanner() }
+        item { PermissionAlertBanner() }
+        item { SettingsAlertBanner() }
         Updater.available?.let { release ->
             item {
-                Panel(container = MaterialTheme.colorScheme.primaryContainer) {
+                Panel(container = BannerColors.update(), contentColor = BannerColors.text()) {
                     Text("A new version is available", fontWeight = FontWeight.SemiBold)
                     Text("Version ${release.version} is ready. Your months and tenants stay as they are.")
                     UpdateActions()

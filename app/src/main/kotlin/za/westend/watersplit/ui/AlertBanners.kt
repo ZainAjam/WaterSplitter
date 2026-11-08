@@ -8,7 +8,9 @@ import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.Button
+import androidx.compose.ui.graphics.Color
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -80,59 +82,79 @@ const val BACKUP_PICKER_HELP =
     "In the next screen, open the menu at the top left and choose where the backup should live (this phone, Google Drive, OneDrive...). " +
         "Open or create a folder there, then tap \"Use this folder\" and Allow. The very top of a drive can't be used."
 
+/** The three alert banners' colours: light red (permissions), light orange (settings), light green (updates), with a dark variant. */
+object BannerColors {
+    @Composable
+    fun permission(): Color = if (isSystemInDarkTheme()) Color(0xFF5C2B29) else Color(0xFFFFDAD6)
+
+    @Composable
+    fun settings(): Color = if (isSystemInDarkTheme()) Color(0xFF5A3B13) else Color(0xFFFFE2BF)
+
+    @Composable
+    fun update(): Color = if (isSystemInDarkTheme()) Color(0xFF1F4A2A) else Color(0xFFD6F0D0)
+
+    @Composable
+    fun text(): Color = if (isSystemInDarkTheme()) Color(0xFFF1F1F1) else Color(0xFF1B1B1B)
+}
+
 /**
- * The "permissions and settings alert banner": lists what is still outstanding (install permission, notification permission,
- * backup location) and has one button that deals with the next one each time it is tapped. Shows nothing when all is set.
+ * The permission alert banner (light red): every permission that is still missing, each with its own button, so she sees up front
+ * how many things there are to do. Shows nothing when both are allowed.
  */
 @Composable
-fun PermissionsAlertBanner() {
+fun PermissionAlertBanner() {
     val context = LocalContext.current
     val needInstall = Updater.isConfigured && !Updater.installAllowed
     val needNotifications = !PermissionStatus.notificationsAllowed
-    val needLocation = !BackupLocation.choiceMade
-    if (!needInstall && !needNotifications && !needLocation) return
+    if (!needInstall && !needNotifications) return
 
-    var problem by remember { mutableStateOf<String?>(null) }
     val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         PermissionStatus.refresh(context)
     }
-    val chooseLocation = rememberBackupLocationPicker { problem = it }
-
-    val next = when {
-        needInstall -> "Allow installing updates"
-        needNotifications -> "Allow notifications"
-        else -> "Choose backup location"
-    }
-    Panel(container = MaterialTheme.colorScheme.tertiaryContainer) {
-        SectionTitle("Outstanding permissions or backup location")
-        if (needInstall) Text("• Allow the app to install its own updates")
-        if (needNotifications) Text("• Allow notifications (for reminders)")
-        if (needLocation) Text("• Choose where backups are saved")
-        Button(
-            onClick = {
-                problem = null
-                when {
-                    needInstall -> context.startActivity(Updater.allowInstallIntent(context))
-                    needNotifications -> {
-                        if (PermissionStatus.alreadyAsked(context)) {
-                            context.startActivity(PermissionStatus.notificationSettingsIntent(context))
-                        } else {
-                            PermissionStatus.markAsked(context)
-                            askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
-                        }
-                    }
-                    else -> chooseLocation()
-                }
-            },
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text(next) }
-        if (!needInstall && !needNotifications && needLocation) {
-            Text(BACKUP_PICKER_HELP, style = MaterialTheme.typography.bodySmall)
-            TextButton(onClick = { BackupLocation.useDefault(context) }, modifier = Modifier.fillMaxWidth()) {
-                Text("Keep the default instead (choose each time)", fontWeight = FontWeight.Normal)
+    Panel(container = BannerColors.permission(), contentColor = BannerColors.text()) {
+        SectionTitle("Permissions needed")
+        if (needInstall) {
+            Text("Let Water Splitter install its own updates.")
+            Button(onClick = { context.startActivity(Updater.allowInstallIntent(context)) }, modifier = Modifier.fillMaxWidth()) {
+                Text("Allow installing updates")
             }
-        } else {
-            Text("Tap the button for each item in turn.", style = MaterialTheme.typography.bodySmall)
+        }
+        if (needNotifications) {
+            Text("Let Water Splitter send you reminders.")
+            Button(
+                onClick = {
+                    if (PermissionStatus.alreadyAsked(context)) {
+                        context.startActivity(PermissionStatus.notificationSettingsIntent(context))
+                    } else {
+                        PermissionStatus.markAsked(context)
+                        askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("Allow notifications") }
+        }
+    }
+}
+
+/**
+ * The settings alert banner (light orange): the backup location has not been decided yet. It says where backups go by default and
+ * can be ignored, which makes it go away.
+ */
+@Composable
+fun SettingsAlertBanner() {
+    val context = LocalContext.current
+    if (BackupLocation.choiceMade) return
+    var problem by remember { mutableStateOf<String?>(null) }
+    val chooseLocation = rememberBackupLocationPicker { problem = it }
+    Panel(container = BannerColors.settings(), contentColor = BannerColors.text()) {
+        SectionTitle("Backup location")
+        Text(
+            "If you don't choose a location, your backup is saved automatically in ${BackupLocation.DEFAULT_LABEL}. " +
+                "Choose another location, for example Google Drive or OneDrive, to keep it off this phone.",
+        )
+        Button(onClick = chooseLocation, modifier = Modifier.fillMaxWidth()) { Text("Choose backup location") }
+        TextButton(onClick = { BackupLocation.useDefault(context) }, modifier = Modifier.fillMaxWidth()) {
+            Text("Ignore - keep the default location", fontWeight = FontWeight.Normal)
         }
         problem?.let { Text(it, color = MaterialTheme.colorScheme.error) }
     }

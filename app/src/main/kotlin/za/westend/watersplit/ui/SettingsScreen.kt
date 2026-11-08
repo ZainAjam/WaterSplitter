@@ -210,25 +210,21 @@ private fun BackupPanel(store: Store) {
     Panel {
         SectionTitle("Backup")
         Text(
-            "Your months, tenants and the attached invoices and photos live on this phone. A backup is one file. Choose a folder once " +
-                "(on this phone, in Google Drive, OneDrive...) and the app refreshes the backup there after every finished month. " +
-                "The Claude key is not included.",
+            "Your months, tenants and the attached invoices and photos live on this phone. A backup is one file, and the app refreshes " +
+                "it by itself after every finished month. The Claude key is not included.",
             style = MaterialTheme.typography.bodyMedium,
         )
-        if (BackupLocation.configured) {
-            Text("✓ Backups are kept in: ${BackupLocation.label}", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
-            if (BackupLocation.summary.isNotBlank()) Text(BackupLocation.summary, style = MaterialTheme.typography.bodySmall)
-        } else {
-            Text("Backup location: not chosen. You choose where to save each time.", style = MaterialTheme.typography.bodyMedium)
-        }
+        Text("Backups are kept in: ${BackupLocation.where}", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+        if (BackupLocation.summary.isNotBlank()) Text(BackupLocation.summary, style = MaterialTheme.typography.bodySmall)
         Button(
             onClick = {
                 message = null
-                if (BackupLocation.configured) BackupLocation.backupAsync(context) else save.launch("water-splitter-backup-$stamp.zip")
+                BackupLocation.backupAsync(context)
             },
             enabled = !BackupLocation.running,
             modifier = Modifier.fillMaxWidth(),
         ) { Text(if (BackupLocation.running) "Backing up…" else "Save a backup") }
+        OutlinedButton(onClick = { save.launch("water-splitter-backup-$stamp.zip") }, modifier = Modifier.fillMaxWidth()) { Text("Save a copy somewhere else") }
         OutlinedButton(onClick = restore, modifier = Modifier.fillMaxWidth()) { Text("Restore from a backup") }
         OutlinedButton(onClick = chooseLocation, modifier = Modifier.fillMaxWidth()) {
             Text(if (BackupLocation.configured) "Change backup location" else "Choose a backup location")
@@ -236,7 +232,7 @@ private fun BackupPanel(store: Store) {
         Text(BACKUP_PICKER_HELP, style = MaterialTheme.typography.bodySmall)
         if (BackupLocation.configured) {
             TextButton(onClick = { BackupLocation.useDefault(context) }, modifier = Modifier.fillMaxWidth()) {
-                Text("Go back to choosing where to save each time")
+                Text("Use the default location again (Downloads folder)")
             }
         }
         message?.let { Text(it, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold) }

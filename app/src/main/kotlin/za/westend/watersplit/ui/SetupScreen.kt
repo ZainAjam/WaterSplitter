@@ -239,9 +239,8 @@ fun SetupScreen(
 
             2 -> {
                 Text(
-                    "Where should backups be kept? By default the app does what it has always done: when you tap Save a backup, Android's own " +
-                        "Save screen asks where to put it. Or choose a folder once (on this phone, in Google Drive, OneDrive or another app) " +
-                        "and the app keeps a backup there by itself after every finished month.",
+                    "Where should backups be kept? After every finished month the app saves a backup by itself. If you do nothing, it goes in " +
+                        "${BackupLocation.DEFAULT_LABEL}. Or choose another location once (on this phone, in Google Drive, OneDrive or another app).",
                     style = MaterialTheme.typography.bodyLarge,
                 )
                 Panel {
@@ -249,7 +248,7 @@ fun SetupScreen(
                     if (BackupLocation.configured) {
                         Text("✓ Backups will be kept in: ${BackupLocation.label}", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
                     } else if (BackupLocation.choiceMade) {
-                        Text("✓ You'll choose where to save each time (the default).", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                        Text("✓ Backups will be kept in ${BackupLocation.DEFAULT_LABEL}.", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
                     } else {
                         Text(BACKUP_PICKER_HELP, style = MaterialTheme.typography.bodySmall)
                     }
@@ -263,7 +262,7 @@ fun SetupScreen(
                         Text("Next", style = MaterialTheme.typography.titleMedium)
                     }
                 } else {
-                    SkipButton("Keep the default (choose each time)") {
+                    SkipButton("Keep the default location") {
                         BackupLocation.useDefault(context)
                         onStep(if (restoredWithTenants) 6 else 3)
                     }
