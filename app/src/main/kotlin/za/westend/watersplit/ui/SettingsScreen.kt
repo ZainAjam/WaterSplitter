@@ -220,7 +220,14 @@ fun DriveBackupSection(onlyIfSetUp: Boolean = false) {
                     color = MaterialTheme.colorScheme.error,
                 )
             }
-            Text("Tap the button, open the menu at the top left and choose Drive, open My Drive, then tap \"Use this folder\".", style = MaterialTheme.typography.bodySmall)
+            Text(
+                "1. Tap the button below.\n" +
+                    "2. Open the menu at the top left and choose Drive, then open My Drive.\n" +
+                    "3. Tap the new folder button, type ${DriveBackup.FOLDER_NAME} and tap OK. (If that folder is already there, open it instead.)\n" +
+                    "4. Tap \"Use this folder\", then Allow.\n" +
+                    "Android doesn't let an app use the top of My Drive itself, which is why the folder is needed.",
+                style = MaterialTheme.typography.bodySmall,
+            )
             Button(onClick = { choose.launch(null) }, modifier = Modifier.fillMaxWidth()) { Text("Set up Google Drive backup") }
         } else {
             Text("✓ Backups go to the \"${DriveBackup.FOLDER_NAME}\" folder in Google Drive.", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)

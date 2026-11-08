@@ -40,11 +40,13 @@ Business rules: `docs/RULES.md`. Read it before touching `Calculator.kt`.
   send" a dialog offers to delete those originals (`DraftScreen.finish`); files that arrive through the share sheet have no `sourceUri` and are
   never deleted. Settings hub = Tenants, Service Settings, App Settings. "Find in my contacts" fills BOTH name and number.
 - Google Drive backup (`data/DriveBackup.kt`): after every completed month (`DraftScreen.finish`) the same zip as Settings -> Backup is written as ONE file
-  (`water-splitter-backup.zip`, replaced each time) into a folder "Water Splitter data backup". It uses Android's folder picker (`OpenDocumentTree`),
-  so there is no Google sign-in or API key; it only works when the Google Drive app is installed on the phone (Drive then appears in the picker) and a
-  folder was chosen in App Settings (or via the nudge on a month page). The chosen folder is stored in SharedPreferences "drive-backup", not data.json.
-  Tested only against an ordinary local folder (the S21 FE has no Drive app); real Drive is untested. Home has a "?" Help button (`HelpScreen`)
-  with the 3-step routine: download the invoice from the email, save the meter photo in WhatsApp, then start a new month in the app.
+  (`water-splitter-backup.zip`, replaced each time) into a folder "Water Splitter data backup", chosen once with Android's folder picker
+  (`OpenDocumentTree`; no Google sign-in, no API key). It needs the Google Drive app on the phone (Drive then appears under "Show roots").
+  Android blocks choosing the top of My Drive itself ("Use this folder" is greyed out), so she creates (or opens) the folder
+  "Water Splitter data backup" inside My Drive in the picker; the app uses it directly. The choice is stored in SharedPreferences "drive-backup",
+  not data.json. TESTED on real Google Drive on the S21 FE (setup, manual and automatic backup, file replaced not duplicated, survives an app update).
+  Home has a "?" Help button (`HelpScreen`) with the 3-step routine: download the invoice from the email, save the meter photo in WhatsApp,
+  then start a new month in the app.
 - Share target: `MainActivity` (launchMode singleTask) accepts SEND / SEND_MULTIPLE for PDF, images and octet-stream. `share/Incoming.kt`
   copies the content URI at once (Gmail's grant is short-lived) and sniffs the real type from the file's first bytes.
   `ui/ImportScreen.kt` asks "invoice or meter photo?" and "which month?".
