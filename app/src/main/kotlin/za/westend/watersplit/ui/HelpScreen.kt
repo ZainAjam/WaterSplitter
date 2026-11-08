@@ -18,7 +18,7 @@ fun HelpScreen(onBack: () -> Unit) {
     ScreenColumn(title = "How to use Water Splitter", onBack = onBack) {
         HelpStep(
             number = 1,
-            text = "Find the municipality email and press the download button next to the invoice attachment of the email.",
+            text = "Find the municipality email in the Gmail app and then press the download button next to the invoice attachment of the email.",
         )
         HelpStep(
             number = 2,

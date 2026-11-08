@@ -334,7 +334,7 @@ fun SetupScreen(
             4 -> {
                 Text(
                     "If you want the earlier months to show who was invoiced, add previous tenants too. This is optional: " +
-                        "you can add them any time under Settings, Tenants.",
+                        "you can add them any time under Settings, Tenant Settings.",
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 House.entries.forEach { house ->

@@ -517,7 +517,7 @@ fun DraftScreen(
                 )
             }
             if (anyMissing) {
-                TextButton(onClick = onTenants) { Text("Open Tenants to add them") }
+                TextButton(onClick = onTenants) { Text("Open Tenant Settings to add them") }
             }
             check.otherProblems.forEach { Text(it, color = MaterialTheme.colorScheme.error) }
             if (!canSend) {

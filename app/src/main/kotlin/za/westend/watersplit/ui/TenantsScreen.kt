@@ -39,7 +39,7 @@ import za.westend.watersplit.engine.TenantSave
 @Composable
 fun TenantsScreen(store: Store, onBack: () -> Unit, onEdit: (id: String?, house: House) -> Unit) {
     val now = remember { MonthKey.current() }
-    ScreenColumn(title = "Tenants", onBack = onBack) {
+    ScreenColumn(title = "Tenant Settings", onBack = onBack) {
         Text(
             "Each month's statements go to the tenant recorded for that month, so keep these dates right when someone moves in or out.",
             style = MaterialTheme.typography.bodyMedium,

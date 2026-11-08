@@ -357,9 +357,9 @@ fun ClaudeKeyPanel(onChanged: () -> Unit = {}) {
 fun SettingsScreen(onBack: () -> Unit, onTenants: () -> Unit, onService: () -> Unit, onApp: () -> Unit) {
     ScreenColumn(title = "Settings", onBack = onBack) {
         Panel {
-            SectionTitle("Tenants")
+            SectionTitle("Tenant Settings")
             Text("Names, WhatsApp numbers and the months each tenant lived in each house.")
-            Button(onClick = onTenants, modifier = Modifier.fillMaxWidth()) { Text("Open Tenants") }
+            Button(onClick = onTenants, modifier = Modifier.fillMaxWidth()) { Text("Open Tenant Settings") }
         }
         Panel {
             SectionTitle("Service Settings")

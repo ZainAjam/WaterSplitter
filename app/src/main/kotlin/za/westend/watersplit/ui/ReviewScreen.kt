@@ -215,10 +215,10 @@ private fun StatementCard(
         Text(heading, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         if (showTenantHint) {
             Text(
-                "No tenant is recorded for this house in this month. Add one in Tenants so this and future months show who was invoiced.",
+                "No tenant is recorded for this house in this month. Add one in Tenant Settings so this and future months show who was invoiced.",
                 style = MaterialTheme.typography.bodySmall,
             )
-            TextButton(onClick = onTenants) { Text("Open Tenants") }
+            TextButton(onClick = onTenants) { Text("Open Tenant Settings") }
         }
         statement.lines.forEach { line ->
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
