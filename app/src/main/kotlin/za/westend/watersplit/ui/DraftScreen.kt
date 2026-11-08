@@ -1,6 +1,7 @@
 package za.westend.watersplit.ui
 
 import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -12,6 +13,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.material3.Icon
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.Icons
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -61,6 +69,9 @@ import za.westend.watersplit.engine.Party
 import za.westend.watersplit.engine.ReadingNote
 import za.westend.watersplit.reading.ReaderService
 import za.westend.watersplit.share.Incoming
+import za.westend.watersplit.share.PickDocumentFrom
+import za.westend.watersplit.share.SourceFiles
+import za.westend.watersplit.share.StartFolder
 
 /** The draft's fields as live, editable text. */
 private class DraftForm(f: DraftFields) {
@@ -147,6 +158,7 @@ fun DraftScreen(
     val seenReadVersion = remember(key) { intArrayOf(draft.readVersion) }
     var notice by remember(key) { mutableStateOf<String?>(null) }
     var askDelete by remember(key) { mutableStateOf(false) }
+    var askCleanup by remember(key) { mutableStateOf(false) }
     // The numbers are hidden behind a read-only summary once captured; these open them for correcting.
     var editInvoice by remember(key) { mutableStateOf(false) }
     var editMeter by remember(key) { mutableStateOf(false) }
@@ -180,13 +192,14 @@ fun DraftScreen(
                 notice = "That file can't be used. Choose a PDF or a photo."
             } else {
                 flush()
-                store.attach(key, kind, item.file, item.mime)
+                // Remember where it came from, so she can be asked about deleting the original once the month is done.
+                store.attach(key, kind, item.file, item.mime, SourceFiles.rememberForDelete(context, uri))
                 ReaderService.start(store, key, kind)
             }
         }
     }
-    val pickInvoice = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { pick(AttachmentKind.INVOICE, it) }
-    val pickMeter = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { pick(AttachmentKind.METER, it) }
+    val pickInvoice = rememberLauncherForActivityResult(PickDocumentFrom(StartFolder.DOWNLOADS)) { pick(AttachmentKind.INVOICE, it) }
+    val pickMeter = rememberLauncherForActivityResult(PickDocumentFrom(StartFolder.WHATSAPP_PICTURES)) { pick(AttachmentKind.METER, it) }
 
     fun moveTo(target: MonthKey) {
         if (store.occupant(target.key) != Occupant.NONE) {
@@ -219,6 +232,33 @@ fun DraftScreen(
     fun mtr(set: (String) -> Unit): (String) -> Unit = { v ->
         set(v)
         editMeter = true
+    }
+
+    // Finishing the draft: the files stay in the app; the originals on the phone (if she picked them from there) are
+    // only deleted after she says so.
+    fun finish(deleteOriginals: Boolean) {
+        val invoiceSource = draft.invoice?.sourceUri
+        val meterSource = draft.meter?.sourceUri
+        val record = buildRecord(
+            store, key, form.toFields(), check, daysInMonth,
+            draft.invoice?.copy(sourceUri = null), draft.meter?.copy(sourceUri = null),
+        ) ?: return
+        store.completeDraft(record)
+        val app = context.applicationContext
+        if (deleteOriginals) {
+            // Own scope: this screen is left the moment the month is saved.
+            kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+                val failed = listOfNotNull(invoiceSource, meterSource).count { !SourceFiles.delete(app, it) }
+                if (failed > 0) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(app, "Some files couldn't be deleted. You can remove them in your Files app.", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+        } else {
+            listOfNotNull(invoiceSource, meterSource).forEach { runCatching { SourceFiles.forget(app, it) } }
+        }
+        onReview(key)
     }
 
     ScreenColumn(title = "Draft", onBack = onBack) {
@@ -318,7 +358,11 @@ fun DraftScreen(
                 }
             } else {
                 // Nothing attached and nothing typed: keep the page quiet.
-                TextButton(onClick = { editInvoice = true }) { Text("No file? Type the numbers yourself") }
+                FilledTonalButton(onClick = { editInvoice = true }, modifier = Modifier.fillMaxWidth().height(48.dp)) {
+                    Icon(Icons.Filled.Edit, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Type the numbers yourself")
+                }
             }
         }
 
@@ -409,7 +453,11 @@ fun DraftScreen(
                     }) { Text("Done correcting") }
                 }
             } else {
-                TextButton(onClick = { editMeter = true }) { Text("No photo? Type the reading yourself") }
+                FilledTonalButton(onClick = { editMeter = true }, modifier = Modifier.fillMaxWidth().height(48.dp)) {
+                    Icon(Icons.Filled.Edit, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Type the reading yourself")
+                }
             }
         }
 
@@ -478,20 +526,44 @@ fun DraftScreen(
             }
         }
 
+        val hasOriginals = draft.invoice?.sourceUri != null || draft.meter?.sourceUri != null
         Button(
             enabled = canSend,
-            onClick = {
-                val record = buildRecord(store, key, form.toFields(), check, daysInMonth, draft.invoice, draft.meter)
-                if (record != null) {
-                    store.completeDraft(record)
-                    onReview(key)
-                }
-            },
+            onClick = { if (hasOriginals) askCleanup = true else finish(deleteOriginals = false) },
             modifier = Modifier.fillMaxWidth().height(56.dp),
         ) { Text("Review & send", style = MaterialTheme.typography.titleMedium) }
         TextButton(onClick = { askDelete = true }, modifier = Modifier.fillMaxWidth()) {
             Text("Delete this draft", color = MaterialTheme.colorScheme.error)
         }
+    }
+
+    if (askCleanup) {
+        val what = listOfNotNull(
+            "invoice".takeIf { draft.invoice?.sourceUri != null },
+            "meter photo".takeIf { draft.meter?.sourceUri != null },
+        ).joinToString(" and the ")
+        AlertDialog(
+            onDismissRequest = { askCleanup = false },
+            title = { Text("Delete the $what from your phone?") },
+            text = {
+                Text(
+                    "Water Splitter keeps its own copy of the $what from now on, so the original files you attached can be removed " +
+                        "from your phone to save space. They will be deleted from where you picked them (for example Downloads).",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    askCleanup = false
+                    finish(deleteOriginals = true)
+                }) { Text("Yes, delete them") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    askCleanup = false
+                    finish(deleteOriginals = false)
+                }) { Text("No, keep them") }
+            },
+        )
     }
 
     if (askDelete) {
@@ -609,7 +681,11 @@ private fun AttachmentArea(store: Store, key: String, kind: AttachmentKind, att:
             else "Share the meter photo from WhatsApp to this app, or attach it here.",
             style = MaterialTheme.typography.bodyMedium,
         )
-        OutlinedButton(onClick = onPick) { Text(if (kind == AttachmentKind.INVOICE) "Attach invoice" else "Attach meter photo") }
+        Button(onClick = onPick, modifier = Modifier.fillMaxWidth().height(52.dp)) {
+            Icon(Icons.Filled.Add, contentDescription = null)
+            Spacer(Modifier.width(8.dp))
+            Text(if (kind == AttachmentKind.INVOICE) "Attach invoice" else "Attach meter photo", style = MaterialTheme.typography.titleMedium)
+        }
     }
 }
 

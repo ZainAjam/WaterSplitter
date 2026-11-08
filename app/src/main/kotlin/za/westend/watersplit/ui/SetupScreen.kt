@@ -277,7 +277,7 @@ fun SetupScreen(
                             )
                             FindInContactsButton { contactName, contactNumber ->
                                 f.whatsapp = contactNumber
-                                if (f.name.isBlank()) f.name = contactName
+                                if (contactName.isNotBlank()) f.name = contactName
                             }
                             Text("Month they moved in", style = MaterialTheme.typography.bodySmall)
                             MonthStepper(f.from) { f.from = it }
@@ -300,7 +300,7 @@ fun SetupScreen(
             3 -> {
                 Text(
                     "If you want the earlier months to show who was invoiced, add previous tenants too. This is optional: " +
-                        "you can add them any time under Settings, Service Settings, Tenants.",
+                        "you can add them any time under Settings, Tenants.",
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 House.entries.forEach { house ->

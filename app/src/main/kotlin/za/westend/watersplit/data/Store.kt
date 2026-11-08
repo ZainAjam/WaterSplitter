@@ -178,14 +178,14 @@ class Store(private val context: Context) {
      * Stores [source] (an invoice or a meter photo) in the draft for [key], replacing any earlier one of the same kind.
      * The draft must exist. [source] is moved into the app's storage.
      */
-    fun attach(key: String, kind: AttachmentKind, source: File, mime: String): Draft {
+    fun attach(key: String, kind: AttachmentKind, source: File, mime: String, sourceUri: String? = null): Draft {
         val d = draft(key) ?: newDraft(key)
         val dir = attachmentDir(key).apply { mkdirs() }
         d.attachment(kind)?.let { File(dir, it.fileName).delete() }
         val name = "${kind.name.lowercase()}.${extensionFor(mime)}"
         source.copyTo(File(dir, name), overwrite = true)
         source.delete()
-        val att = Attachment(name, mime)
+        val att = Attachment(name, mime, sourceUri)
         val updated = if (kind == AttachmentKind.INVOICE) d.copy(invoice = att) else d.copy(meter = att)
         saveDraft(updated)
         return updated

@@ -14,7 +14,7 @@ Business rules: `docs/RULES.md`. Read it before touching `Calculator.kt`.
   the GitHub release APKs are PUBLIC and contain no rent history, account number, meter serial or address. The owner's data reaches her
   phone through Settings -> Backup (save on the test phone, restore on hers). Settings defaults for those fields are blank.
 - App name is "Water Splitter" (package stays `za.westend.watersplit`). Home shows only the title + cog (dot when an update waits), "New month",
-  drafts and previous months. Cog -> `SettingsScreen` hub -> Service Settings (tenants, municipal account, meter serial + last reading,
+  drafts and previous months. Cog -> `SettingsScreen` hub -> Tenants, Service Settings (municipal account, meter serial + last reading,
   statement address/name) and App Settings (Claude key, reminders incl. `Settings.reminderDay`, backup, updates). Sub-screens use the
   `BackArrow` icon, never a "Back" word. `Screen` carries its own `back` target (see `AppRoot.parentOf`).
 - First-time wizard (`ui/SetupScreen.kt`, 6 steps, shown while `Settings.setupDone` is false; installs that already have tenants skip it):
@@ -35,6 +35,10 @@ Business rules: `docs/RULES.md`. Read it before touching `Calculator.kt`.
   adding a new tenant closes an earlier open-ended stay the month before. `MonthRecord` still keeps a name/number snapshot as a
   fallback. Old Settings tenants are migrated to tenancies on first start of v3 data (see `Store.migrateTenantsFromSettings`).
   "Find in my contacts" uses Android's own picker (`ui/Contacts.kt`), so no contacts permission is held.
+- Attaching from the draft screen uses `share/SourceFiles.kt`: the invoice picker opens in Downloads (`primary:Download`), the meter picker in
+  Pictures/WhatsApp, and the picked file's address is kept as `Attachment.sourceUri` (only when Android lets the app delete it). On "Review and
+  send" a dialog offers to delete those originals (`DraftScreen.finish`); files that arrive through the share sheet have no `sourceUri` and are
+  never deleted. Settings hub = Tenants, Service Settings, App Settings. "Find in my contacts" fills BOTH name and number.
 - Share target: `MainActivity` (launchMode singleTask) accepts SEND / SEND_MULTIPLE for PDF, images and octet-stream. `share/Incoming.kt`
   copies the content URI at once (Gmail's grant is short-lived) and sniffs the real type from the file's first bytes.
   `ui/ImportScreen.kt` asks "invoice or meter photo?" and "which month?".

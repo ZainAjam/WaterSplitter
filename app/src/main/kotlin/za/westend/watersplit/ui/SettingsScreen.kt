@@ -338,11 +338,16 @@ fun ClaudeKeyPanel(onChanged: () -> Unit = {}) {
 
 /** The two groups of settings. */
 @Composable
-fun SettingsScreen(onBack: () -> Unit, onService: () -> Unit, onApp: () -> Unit) {
+fun SettingsScreen(onBack: () -> Unit, onTenants: () -> Unit, onService: () -> Unit, onApp: () -> Unit) {
     ScreenColumn(title = "Settings", onBack = onBack) {
         Panel {
+            SectionTitle("Tenants")
+            Text("Names, WhatsApp numbers and the months each tenant lived in each house.")
+            Button(onClick = onTenants, modifier = Modifier.fillMaxWidth()) { Text("Open Tenants") }
+        }
+        Panel {
             SectionTitle("Service Settings")
-            Text("Tenants, the municipal account and meter, what appears on the statements and the last water meter reading.")
+            Text("The municipal account and meter, what appears on the statements and the last water meter reading.")
             Button(onClick = onService, modifier = Modifier.fillMaxWidth()) { Text("Open Service Settings") }
         }
         Panel {
@@ -361,7 +366,7 @@ fun SettingsScreen(onBack: () -> Unit, onService: () -> Unit, onApp: () -> Unit)
 
 /** Everything about the property and the municipal service: tenants, account, meter and what the statements say. */
 @Composable
-fun ServiceSettingsScreen(store: Store, onBack: () -> Unit, onTenants: () -> Unit) {
+fun ServiceSettingsScreen(store: Store, onBack: () -> Unit) {
     val s = store.settings
     var address by remember { mutableStateOf(s.propertyAddress) }
     var issuer by remember { mutableStateOf(s.issuerName) }
@@ -370,12 +375,6 @@ fun ServiceSettingsScreen(store: Store, onBack: () -> Unit, onTenants: () -> Uni
     var serial by remember { mutableStateOf(s.meterSerial) }
 
     ScreenColumn(title = "Service Settings", onBack = onBack) {
-        Panel {
-            SectionTitle("Tenants")
-            Text("Names, WhatsApp numbers and the months each tenant lived in each house.")
-            Button(onClick = onTenants, modifier = Modifier.fillMaxWidth()) { Text("Open Tenants") }
-        }
-
         Panel {
             SectionTitle("Municipal account")
             OutlinedTextField(

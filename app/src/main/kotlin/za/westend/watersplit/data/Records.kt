@@ -34,7 +34,11 @@ enum class AttachmentKind(val label: String) {
 }
 
 /** A file kept with a month (stored under attachments/<month>/<fileName> in the app's private storage). */
-data class Attachment(val fileName: String, val mime: String) {
+/**
+ * [sourceUri] is where the file was picked from on the phone (e.g. Downloads), kept only while the person may still be asked
+ * whether to delete that original. Files shared in through the share sheet have none.
+ */
+data class Attachment(val fileName: String, val mime: String, val sourceUri: String? = null) {
     val isPdf: Boolean get() = mime == "application/pdf"
 }
 
@@ -202,10 +206,10 @@ private fun JSONObject.bigOr0(name: String): BigDecimal = big(name) ?: BigDecima
 private inline fun <reified E : Enum<E>> JSONObject.enumOr(name: String, default: E): E =
     optString(name).let { s -> enumValues<E>().firstOrNull { it.name == s } ?: default }
 
-fun Attachment.toJson(): JSONObject = JSONObject().put("fileName", fileName).put("mime", mime)
+fun Attachment.toJson(): JSONObject = JSONObject().put("fileName", fileName).put("mime", mime).also { if (sourceUri != null) it.put("sourceUri", sourceUri) }
 
 fun attachmentFromJson(o: JSONObject?): Attachment? =
-    if (o == null) null else Attachment(o.getString("fileName"), o.optString("mime", "application/octet-stream"))
+    if (o == null) null else Attachment(o.getString("fileName"), o.optString("mime", "application/octet-stream"), o.optString("sourceUri").ifBlank { null })
 
 private fun JSONObject.attachment(name: String): Attachment? =
     if (!has(name) || isNull(name)) null else attachmentFromJson(optJSONObject(name))

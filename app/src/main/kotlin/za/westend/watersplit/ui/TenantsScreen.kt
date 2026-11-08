@@ -145,7 +145,7 @@ fun TenantEditScreen(store: Store, id: String?, house: House, earlier: Boolean =
             )
             FindInContactsButton { contactName, contactNumber ->
                 whatsapp = contactNumber
-                if (name.isBlank()) name = contactName
+                if (contactName.isNotBlank()) name = contactName
             }
         }
 

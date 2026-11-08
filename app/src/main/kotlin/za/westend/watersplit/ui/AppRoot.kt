@@ -30,7 +30,7 @@ sealed interface Screen {
     data object ServiceSettings : Screen
     data class AppSettings(val back: Screen = Settings) : Screen
     data class Setup(val step: Int) : Screen
-    data class Tenants(val back: Screen = ServiceSettings) : Screen
+    data class Tenants(val back: Screen = Settings) : Screen
     data class TenantEdit(val id: String?, val house: House, val back: Screen, val earlier: Boolean = false) : Screen
     data class Draft(val key: String) : Screen
     data class Review(val key: String) : Screen
@@ -113,13 +113,13 @@ fun AppRoot(store: Store, inbox: ShareInbox) {
                     )
                     Screen.Settings -> SettingsScreen(
                         onBack = { screen = Screen.Home },
+                        onTenants = { screen = Screen.Tenants() },
                         onService = { screen = Screen.ServiceSettings },
                         onApp = { screen = Screen.AppSettings() },
                     )
                     Screen.ServiceSettings -> ServiceSettingsScreen(
                         store,
                         onBack = { screen = Screen.Settings },
-                        onTenants = { screen = Screen.Tenants() },
                     )
                     is Screen.AppSettings -> AppSettingsScreen(store, onBack = { screen = s.back })
                     is Screen.Tenants -> TenantsScreen(
