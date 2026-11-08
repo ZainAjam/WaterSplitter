@@ -15,24 +15,34 @@ import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
 /**
- * Keeps one backup file ("water-splitter-backup.zip", the same zip as Settings -> Backup) in a folder called
- * "Water Splitter data backup" in the person's Google Drive, refreshed every time a month is completed.
+ * Where backups go.
  *
- * It uses Android's own folder picker (Google Drive shows up in it), so the app never signs in to Google and holds no
- * Drive permission beyond the one folder she chose. The folder choice lives in this phone's preferences, not in data.json,
- * so restoring a backup on another phone never points at a folder that isn't there.
+ * By default (no folder chosen) nothing changes: "Save a backup" opens Android's own Save screen and she chooses each time.
+ * She can instead pick a folder once, in Android's folder picker: on the phone, or in any app that offers its storage there
+ * (Google Drive, OneDrive...). Then "Save a backup" writes straight into it, and so does the automatic backup after every
+ * completed month. One file ("water-splitter-backup.zip", the same zip as always) is kept there and replaced each time.
+ *
+ * The choice lives in this phone's preferences, not in data.json, so a restored backup never points at a folder that isn't there.
  */
-object DriveBackup {
+object BackupLocation {
     const val FOLDER_NAME = "Water Splitter data backup"
     const val FILE_NAME = "water-splitter-backup.zip"
-    private const val PREFS = "drive-backup"
+    private const val PREFS = "backup-location"
     private const val RW = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
 
-    /** A folder has been chosen. */
+    /** A folder has been chosen (so backups are automatic). */
     var configured by mutableStateOf(false)
         private set
 
-    /** One sentence about the last backup (when it worked, or why it didn't). */
+    /** She has decided: either a folder, or "keep the default". Until then the app reminds her. */
+    var choiceMade by mutableStateOf(false)
+        private set
+
+    /** For example "Water Splitter data backup in Google Drive". */
+    var label by mutableStateOf("")
+        private set
+
+    /** One sentence about the last automatic backup. */
     var summary by mutableStateOf("")
         private set
 
@@ -43,21 +53,35 @@ object DriveBackup {
 
     fun load(context: Context) {
         val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        configured = p.getString("tree", null) != null
+        val choice = p.getString("choice", null)
+        configured = choice == "folder" && p.getString("tree", null) != null
+        choiceMade = choice != null
+        label = p.getString("label", "").orEmpty()
         summary = p.getString("summary", "").orEmpty()
     }
 
+    /** She chose to keep the default way (the Android Save screen, asked each time). */
+    fun useDefault(context: Context) {
+        val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        p.getString("tree", null)?.let { runCatching { context.contentResolver.releasePersistableUriPermission(Uri.parse(it), RW) } }
+        p.edit().clear().putString("choice", "default").apply()
+        configured = false
+        choiceMade = true
+        label = ""
+        summary = ""
+    }
+
     /**
-     * [picked] is any folder she chose in the folder picker (for Google Drive, normally "My Drive"). The backup goes into a folder
-     * named [FOLDER_NAME] inside it, which is created when it isn't there yet (or used directly if she picked a folder of that name).
-     * Returns a sentence to show when it didn't work, or null. Do not call on the main thread.
+     * [picked] is a folder she chose in the folder picker. The backup goes into a folder named [FOLDER_NAME] inside it (created when it
+     * isn't there yet; or the folder itself when it already has that name). Returns a sentence when it didn't work, else null.
+     * Do not call on the main thread.
      */
     fun setUp(context: Context, picked: Uri): String? = try {
         val cr = context.contentResolver
         cr.takePersistableUriPermission(picked, RW)
         val treeId = DocumentsContract.getTreeDocumentId(picked)
         val pickedDoc = DocumentsContract.buildDocumentUriUsingTree(picked, treeId)
-        val folderId = if (displayName(context, pickedDoc) == FOLDER_NAME) {
+        val folderId = if (displayName(context, pickedDoc).equals(FOLDER_NAME, ignoreCase = true)) {
             treeId
         } else {
             findChild(context, picked, treeId, FOLDER_NAME, folder = true)
@@ -65,14 +89,22 @@ object DriveBackup {
                     ?.let { DocumentsContract.getDocumentId(it) }
                 ?: error("folder not created")
         }
+        val where = providerLabel(context, picked)
+        val text = "$FOLDER_NAME in $where"
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .clear()
+            .putString("choice", "folder")
             .putString("tree", picked.toString())
             .putString("folderId", folderId)
+            .putString("label", text)
             .apply()
         configured = true
+        choiceMade = true
+        label = text
+        summary = ""
         null
     } catch (e: Exception) {
-        "That folder couldn't be used. Choose a folder in your Google Drive (for example My Drive) and try again."
+        "That folder couldn't be used. Choose or create a folder (not the very top of a drive) and try again."
     }
 
     /** Writes the backup now (if a folder was chosen). Safe to call from anywhere; it runs in the background. */
@@ -83,8 +115,8 @@ object DriveBackup {
         scope.launch {
             val result = runCatching { backupBlocking(app) }
             val text = result.fold(
-                { "Backed up to Google Drive on " + LocalDateTime.now().format(DateTimeFormatter.ofPattern("d MMM yyyy 'at' HH:mm")) + "." },
-                { "The last backup to Google Drive didn't work. It is tried again each time a month is completed, or tap Back up now." },
+                { "Backed up on " + LocalDateTime.now().format(DateTimeFormatter.ofPattern("d MMM yyyy 'at' HH:mm")) + "." },
+                { "The last backup didn't work (no internet, or the folder was removed?). It is tried again each time a month is completed, or tap Save a backup." },
             )
             app.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString("summary", text).apply()
             summary = text
@@ -107,13 +139,16 @@ object DriveBackup {
         Backup.write(context, out)
     }
 
-    /** Stops using the chosen folder (the backup already in it stays). */
-    fun forget(context: Context) {
-        val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        p.getString("tree", null)?.let { runCatching { context.contentResolver.releasePersistableUriPermission(Uri.parse(it), RW) } }
-        p.edit().clear().apply()
-        configured = false
-        summary = ""
+    /** "Google Drive", "OneDrive", "Phone storage"... from the app that provides the folder. */
+    private fun providerLabel(context: Context, tree: Uri): String {
+        val authority = tree.authority.orEmpty()
+        return when {
+            authority == "com.android.externalstorage.documents" -> "phone storage"
+            authority.contains("docs.storage") -> "Google Drive"
+            authority.contains("skydrive") || authority.contains("microsoft") -> "OneDrive"
+            else -> context.packageManager.resolveContentProvider(authority, 0)?.applicationInfo?.loadLabel(context.packageManager)?.toString()
+                ?: "the chosen location"
+        }
     }
 
     private fun displayName(context: Context, docUri: Uri): String? =
@@ -132,7 +167,8 @@ object DriveBackup {
         context.contentResolver.query(children, columns, null, null, null)?.use { c ->
             while (c.moveToNext()) {
                 val isDir = c.getString(2) == DocumentsContract.Document.MIME_TYPE_DIR
-                if (c.getString(1) == name && isDir == folder) return c.getString(0)
+                // Drive can show the same name with other capital letters; treat them as the same folder so no duplicate is made.
+                if (c.getString(1).equals(name, ignoreCase = true) && isDir == folder) return c.getString(0)
             }
         }
         return null

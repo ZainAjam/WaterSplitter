@@ -54,14 +54,7 @@ fun HomeScreen(
         contentPadding = PaddingValues(vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        if (Updater.isConfigured && !Updater.installAllowed) {
-            item {
-                Panel(container = MaterialTheme.colorScheme.tertiaryContainer) {
-                    Text("Allow the app to install updates", fontWeight = FontWeight.SemiBold)
-                    InstallPermissionActions()
-                }
-            }
-        }
+        item { PermissionsAlertBanner() }
         Updater.available?.let { release ->
             item {
                 Panel(container = MaterialTheme.colorScheme.primaryContainer) {

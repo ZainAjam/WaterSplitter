@@ -39,7 +39,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import za.westend.watersplit.data.Backup
-import za.westend.watersplit.data.DriveBackup
+import za.westend.watersplit.data.BackupLocation
 import za.westend.watersplit.data.Store
 import za.westend.watersplit.engine.Versions
 import za.westend.watersplit.update.UpdateFailure
@@ -183,71 +183,14 @@ fun RemindersPanel(store: Store) {
     }
 }
 
-/**
- * Backup to a folder called "Water Splitter data backup" in Google Drive after every completed month. [onlyIfSetUp] hides it
- * once it is working (used on the month page, where it is only a nudge to set it up).
- */
-@Composable
-fun DriveBackupSection(onlyIfSetUp: Boolean = false) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var problem by remember { mutableStateOf<String?>(null) }
-    val choose = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
-        if (uri != null) {
-            scope.launch {
-                val error = withContext(Dispatchers.IO) { DriveBackup.setUp(context, uri) }
-                problem = error
-                if (error == null) DriveBackup.backupAsync(context)
-            }
-        }
-    }
-    val configured = DriveBackup.configured
-    if (onlyIfSetUp && configured) {
-        if (DriveBackup.summary.isNotBlank()) Text(DriveBackup.summary, style = MaterialTheme.typography.bodySmall)
-        return
-    }
-    Panel {
-        SectionTitle("Backup to Google Drive")
-        if (!configured) {
-            Text(
-                "After every finished month the app can keep a backup of your data in a folder called \"${DriveBackup.FOLDER_NAME}\" " +
-                    "in your Google Drive. If the phone is lost, nothing is lost with it.",
-            )
-            if (context.packageManager.getLaunchIntentForPackage("com.google.android.apps.docs") == null) {
-                Text(
-                    "The Google Drive app isn't installed on this phone. Install \"Google Drive\" from the Play Store and sign in first, " +
-                        "otherwise Drive won't appear in the folder list.",
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
-            Text(
-                "1. Tap the button below.\n" +
-                    "2. Open the menu at the top left and choose Drive, then open My Drive.\n" +
-                    "3. Tap the new folder button, type ${DriveBackup.FOLDER_NAME} and tap OK. (If that folder is already there, open it instead.)\n" +
-                    "4. Tap \"Use this folder\", then Allow.\n" +
-                    "Android doesn't let an app use the top of My Drive itself, which is why the folder is needed.",
-                style = MaterialTheme.typography.bodySmall,
-            )
-            Button(onClick = { choose.launch(null) }, modifier = Modifier.fillMaxWidth()) { Text("Set up Google Drive backup") }
-        } else {
-            Text("✓ Backups go to the \"${DriveBackup.FOLDER_NAME}\" folder in Google Drive.", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
-            if (DriveBackup.summary.isNotBlank()) Text(DriveBackup.summary)
-            OutlinedButton(onClick = { DriveBackup.backupAsync(context) }, enabled = !DriveBackup.running, modifier = Modifier.fillMaxWidth()) {
-                Text(if (DriveBackup.running) "Backing up…" else "Back up now")
-            }
-            TextButton(onClick = { choose.launch(null) }, modifier = Modifier.fillMaxWidth()) { Text("Choose a different folder") }
-        }
-        problem?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-    }
-}
-
-/** Save a copy of everything to a file (e.g. in Google Drive), or put such a copy back. */
+/** Save a backup, put one back, and choose where backups go. */
 @Composable
 private fun BackupPanel(store: Store) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var message by remember { mutableStateOf<String?>(null) }
     val stamp = remember { LocalDate.now().toString() }
+    // The default way: Android's own Save screen, asked each time.
     val save = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
         if (uri != null) {
             scope.launch {
@@ -262,17 +205,40 @@ private fun BackupPanel(store: Store) {
         }
     }
     val restore = rememberRestoreFromBackup(store, confirm = true) { message = it }
+    val chooseLocation = rememberBackupLocationPicker { message = it }
 
     Panel {
         SectionTitle("Backup")
         Text(
-            "Your months, tenants and the attached invoices and photos live on this phone. Android also backs them up to your " +
-                "Google account on its own, but it's wise to save a copy yourself now and then (for example to Google Drive). " +
+            "Your months, tenants and the attached invoices and photos live on this phone. A backup is one file. Choose a folder once " +
+                "(on this phone, in Google Drive, OneDrive...) and the app refreshes the backup there after every finished month. " +
                 "The Claude key is not included.",
             style = MaterialTheme.typography.bodyMedium,
         )
-        Button(onClick = { save.launch("water-splitter-backup-$stamp.zip") }, modifier = Modifier.fillMaxWidth()) { Text("Save a backup") }
+        if (BackupLocation.configured) {
+            Text("✓ Backups are kept in: ${BackupLocation.label}", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+            if (BackupLocation.summary.isNotBlank()) Text(BackupLocation.summary, style = MaterialTheme.typography.bodySmall)
+        } else {
+            Text("Backup location: not chosen. You choose where to save each time.", style = MaterialTheme.typography.bodyMedium)
+        }
+        Button(
+            onClick = {
+                message = null
+                if (BackupLocation.configured) BackupLocation.backupAsync(context) else save.launch("water-splitter-backup-$stamp.zip")
+            },
+            enabled = !BackupLocation.running,
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text(if (BackupLocation.running) "Backing up…" else "Save a backup") }
         OutlinedButton(onClick = restore, modifier = Modifier.fillMaxWidth()) { Text("Restore from a backup") }
+        OutlinedButton(onClick = chooseLocation, modifier = Modifier.fillMaxWidth()) {
+            Text(if (BackupLocation.configured) "Change backup location" else "Choose a backup location")
+        }
+        Text(BACKUP_PICKER_HELP, style = MaterialTheme.typography.bodySmall)
+        if (BackupLocation.configured) {
+            TextButton(onClick = { BackupLocation.useDefault(context) }, modifier = Modifier.fillMaxWidth()) {
+                Text("Go back to choosing where to save each time")
+            }
+        }
         message?.let { Text(it, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold) }
     }
 }
@@ -506,7 +472,6 @@ fun AppSettingsScreen(store: Store, onBack: () -> Unit) {
     ScreenColumn(title = "App Settings", onBack = onBack) {
         ClaudeKeyPanel()
         RemindersPanel(store)
-        DriveBackupSection()
         BackupPanel(store)
         UpdatesPanel()
     }

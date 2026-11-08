@@ -35,6 +35,7 @@ import za.westend.watersplit.update.Updater
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import za.westend.watersplit.data.BackupLocation
 import za.westend.watersplit.data.Store
 import za.westend.watersplit.engine.House
 import za.westend.watersplit.engine.MonthKey
@@ -43,7 +44,7 @@ import za.westend.watersplit.engine.Tenancy
 import za.westend.watersplit.engine.TenantBook
 import za.westend.watersplit.engine.TenantSave
 
-const val SETUP_STEPS = 6
+const val SETUP_STEPS = 7
 
 /** True when the app may post notifications (always true before Android 13). */
 private fun notificationsGranted(context: Context): Boolean =
@@ -68,7 +69,7 @@ private class TenantForm(open: Tenancy?) {
 }
 
 /**
- * The first-time wizard: 1 allow updates, 2 restore a backup, 3 current tenants, 4 earlier tenants (optional), 5 reminders, 6 Claude key.
+ * The first-time wizard: 1 allow updates and notifications, 2 restore a backup, 3 backup location, 4 current tenants, 5 earlier tenants (optional), 6 reminders, 7 Claude key.
  * The tenants are saved when she presses Next, so going back and forth loses nothing.
  */
 @Composable
@@ -87,18 +88,19 @@ fun SetupScreen(
     }
     var problem by remember { mutableStateOf<String?>(null) }
     var restoreMessage by remember { mutableStateOf<String?>(null) }
+    // After a restore that brought the tenants back, the tenant and reminder steps are already done.
+    var restoredWithTenants by remember { mutableStateOf(false) }
+    var locationProblem by remember { mutableStateOf<String?>(null) }
+    val chooseLocation = rememberBackupLocationPicker { locationProblem = it }
     val restore = rememberRestoreFromBackup(
         store,
         confirm = false,
         onRestored = {
             problem = null
             // The backup brings the tenants, months and settings; the Claude key is never in a backup, so go on to that step.
-            if (store.tenancies.isNotEmpty()) {
-                onStep(5)
-            } else {
-                generation++
-                onStep(2)
-            }
+            restoredWithTenants = store.tenancies.isNotEmpty()
+            if (!restoredWithTenants) generation++
+            onStep(2)
         },
         onResult = { restoreMessage = it },
     )
@@ -237,6 +239,39 @@ fun SetupScreen(
 
             2 -> {
                 Text(
+                    "Where should backups be kept? By default the app does what it has always done: when you tap Save a backup, Android's own " +
+                        "Save screen asks where to put it. Or choose a folder once (on this phone, in Google Drive, OneDrive or another app) " +
+                        "and the app keeps a backup there by itself after every finished month.",
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+                Panel {
+                    SectionTitle("Backup location")
+                    if (BackupLocation.configured) {
+                        Text("✓ Backups will be kept in: ${BackupLocation.label}", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                    } else if (BackupLocation.choiceMade) {
+                        Text("✓ You'll choose where to save each time (the default).", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                    } else {
+                        Text(BACKUP_PICKER_HELP, style = MaterialTheme.typography.bodySmall)
+                    }
+                    Button(onClick = chooseLocation, modifier = Modifier.fillMaxWidth()) {
+                        Text(if (BackupLocation.configured) "Choose a different folder" else "Choose a backup location")
+                    }
+                    locationProblem?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                }
+                if (BackupLocation.choiceMade) {
+                    Button(onClick = { onStep(if (restoredWithTenants) 6 else 3) }, modifier = Modifier.fillMaxWidth().height(56.dp)) {
+                        Text("Next", style = MaterialTheme.typography.titleMedium)
+                    }
+                } else {
+                    SkipButton("Keep the default (choose each time)") {
+                        BackupLocation.useDefault(context)
+                        onStep(if (restoredWithTenants) 6 else 3)
+                    }
+                }
+            }
+
+            3 -> {
+                Text(
                     "Who lives in the two houses now? Statements are sent to the WhatsApp number you give here.",
                     style = MaterialTheme.typography.bodyMedium,
                 )
@@ -292,12 +327,12 @@ fun SetupScreen(
                 }
                 problem?.let { Panel(container = MaterialTheme.colorScheme.errorContainer) { Text(it, color = MaterialTheme.colorScheme.onErrorContainer) } }
                 Button(
-                    onClick = { if (saveCurrentTenants()) onStep(3) },
+                    onClick = { if (saveCurrentTenants()) onStep(4) },
                     modifier = Modifier.fillMaxWidth().height(56.dp),
                 ) { Text("Next", style = MaterialTheme.typography.titleMedium) }
             }
 
-            3 -> {
+            4 -> {
                 Text(
                     "If you want the earlier months to show who was invoiced, add previous tenants too. This is optional: " +
                         "you can add them any time under Settings, Tenants.",
@@ -316,18 +351,18 @@ fun SetupScreen(
                         }
                     }
                 }
-                Button(onClick = { onStep(4) }, modifier = Modifier.fillMaxWidth().height(56.dp)) {
+                Button(onClick = { onStep(5) }, modifier = Modifier.fillMaxWidth().height(56.dp)) {
                     Text("Next", style = MaterialTheme.typography.titleMedium)
                 }
             }
 
-            4 -> {
+            5 -> {
                 Text(
                     "The municipal invoice arrives by email around the 24th. Choose the day of the month you want a reminder from.",
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 RemindersPanel(store)
-                Button(onClick = { onStep(5) }, modifier = Modifier.fillMaxWidth().height(56.dp)) {
+                Button(onClick = { onStep(6) }, modifier = Modifier.fillMaxWidth().height(56.dp)) {
                     Text("Next", style = MaterialTheme.typography.titleMedium)
                 }
             }
@@ -350,7 +385,7 @@ fun SetupScreen(
             }
         }
 
-        if (step in 3..4) {
+        if (step in 4..5) {
             SkipButton("Skip this step") { onStep(step + 1) }
         }
     }

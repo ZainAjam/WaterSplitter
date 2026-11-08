@@ -150,8 +150,6 @@ fun ReviewScreen(
 
         notice?.let { Panel { Text(it) } }
 
-        if (!record.importedFromSheet) DriveBackupSection(onlyIfSetUp = true)
-
         Panel {
             SectionTitle("You pay")
             result.owner.lines.forEach { line ->

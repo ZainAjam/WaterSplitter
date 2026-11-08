@@ -68,7 +68,7 @@ import za.westend.watersplit.engine.Parse
 import za.westend.watersplit.engine.Party
 import za.westend.watersplit.engine.ReadingNote
 import za.westend.watersplit.reading.ReaderService
-import za.westend.watersplit.data.DriveBackup
+import za.westend.watersplit.data.BackupLocation
 import za.westend.watersplit.share.Incoming
 import za.westend.watersplit.share.PickDocumentFrom
 import za.westend.watersplit.share.SourceFiles
@@ -246,7 +246,7 @@ fun DraftScreen(
         ) ?: return
         store.completeDraft(record)
         val app = context.applicationContext
-        DriveBackup.backupAsync(app) // refreshes the Google Drive backup (does nothing until a folder was chosen)
+        BackupLocation.backupAsync(app) // refreshes the backup in the chosen folder (does nothing until one was chosen)
         if (deleteOriginals) {
             // Own scope: this screen is left the moment the month is saved.
             kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {

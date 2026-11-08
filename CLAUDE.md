@@ -39,14 +39,18 @@ Business rules: `docs/RULES.md`. Read it before touching `Calculator.kt`.
   Pictures/WhatsApp, and the picked file's address is kept as `Attachment.sourceUri` (only when Android lets the app delete it). On "Review and
   send" a dialog offers to delete those originals (`DraftScreen.finish`); files that arrive through the share sheet have no `sourceUri` and are
   never deleted. Settings hub = Tenants, Service Settings, App Settings. "Find in my contacts" fills BOTH name and number.
-- Google Drive backup (`data/DriveBackup.kt`): after every completed month (`DraftScreen.finish`) the same zip as Settings -> Backup is written as ONE file
-  (`water-splitter-backup.zip`, replaced each time) into a folder "Water Splitter data backup", chosen once with Android's folder picker
-  (`OpenDocumentTree`; no Google sign-in, no API key). It needs the Google Drive app on the phone (Drive then appears under "Show roots").
-  Android blocks choosing the top of My Drive itself ("Use this folder" is greyed out), so she creates (or opens) the folder
-  "Water Splitter data backup" inside My Drive in the picker; the app uses it directly. The choice is stored in SharedPreferences "drive-backup",
-  not data.json. TESTED on real Google Drive on the S21 FE (setup, manual and automatic backup, file replaced not duplicated, survives an app update).
-  Home has a "?" Help button (`HelpScreen`) with the 3-step routine: download the invoice from the email, save the meter photo in WhatsApp,
-  then start a new month in the app.
+- Backup location (`data/BackupLocation.kt`, UI in `ui/AlertBanners.kt` + `SettingsScreen.BackupPanel`): by DEFAULT "Save a backup" opens Android's Save
+  screen (CreateDocument, asked each time). She can instead choose a folder once in Android's folder picker (`OpenDocumentTree`: phone storage,
+  Google Drive, OneDrive... whatever app is installed); then "Save a backup" and the automatic backup after every completed month
+  (`DraftScreen.finish`) write ONE file `water-splitter-backup.zip` into a folder "Water Splitter data backup" inside it (created if missing; name
+  matched ignoring capitals), replacing the old file. Android refuses the very top of a drive, so she creates/opens a folder in the picker.
+  The choice ("folder" or "default") is in SharedPreferences "backup-location", not data.json. Tested on real Google Drive on the S21 FE.
+- Home banners, top of the screen: (1) `PermissionsAlertBanner` "Outstanding permissions or backup location": lists what is missing (install unknown apps
+  [only when the update repo is set], notifications, backup location not yet decided) and ONE button that does the next item each tap; offers
+  "Keep the default instead" for the location. (2) the update banner (`Updater.available`) with "Download and install". `PermissionStatus` and
+  `Updater.installAllowed` are refreshed in `MainActivity.onResume`.
+- Wizard is now 7 steps: 1 allow updates + notifications, 2 restore, 3 backup location (choose a folder, or "Keep the default"), 4 current tenants,
+  5 earlier tenants, 6 reminders, 7 Claude key. A restore that brings tenants back goes 3 -> 7.
 - Share target: `MainActivity` (launchMode singleTask) accepts SEND / SEND_MULTIPLE for PDF, images and octet-stream. `share/Incoming.kt`
   copies the content URI at once (Gmail's grant is short-lived) and sniffs the real type from the file's first bytes.
   `ui/ImportScreen.kt` asks "invoice or meter photo?" and "which month?".

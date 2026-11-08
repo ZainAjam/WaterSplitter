@@ -6,7 +6,8 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import za.westend.watersplit.data.DriveBackup
+import za.westend.watersplit.data.BackupLocation
+import za.westend.watersplit.ui.PermissionStatus
 import za.westend.watersplit.data.Store
 import za.westend.watersplit.reading.ReaderService
 import za.westend.watersplit.reminders.ReminderScheduler
@@ -26,7 +27,8 @@ class MainActivity : ComponentActivity() {
         val store = Store(applicationContext)
         ReaderService.init(applicationContext)
         ReminderScheduler.apply(applicationContext, store.settings.remindersOn)
-        DriveBackup.load(applicationContext)
+        BackupLocation.load(applicationContext)
+        PermissionStatus.refresh(applicationContext)
         Updater.refreshPermission(applicationContext)
         Updater.checkIfDue(applicationContext)
         Incoming.cleanUp(applicationContext)
@@ -43,6 +45,7 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         // She may have just switched on "install unknown apps" in Android's settings, or the app was left open for days.
         Updater.refreshPermission(applicationContext)
+        PermissionStatus.refresh(applicationContext)
         Updater.checkIfDue(applicationContext)
     }
 
