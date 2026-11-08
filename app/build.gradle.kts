@@ -84,4 +84,7 @@ dependencies {
 
     // Official Anthropic SDK: reads the municipal invoice and the meter photo (phases 3 and 4).
     implementation("com.anthropic:anthropic-java:3.6.0")
+
+    // Lets the app ask the person once for permission to keep its backup file in her Google Drive (no Drive app needed).
+    implementation("com.google.android.gms:play-services-auth:21.5.1")
 }

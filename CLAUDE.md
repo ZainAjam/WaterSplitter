@@ -39,12 +39,13 @@ Business rules: `docs/RULES.md`. Read it before touching `Calculator.kt`.
   Pictures/WhatsApp, and the picked file's address is kept as `Attachment.sourceUri` (only when Android lets the app delete it). On "Review and
   send" a dialog offers to delete those originals (`DraftScreen.finish`); files that arrive through the share sheet have no `sourceUri` and are
   never deleted. Settings hub = Tenants, Service Settings, App Settings. "Find in my contacts" fills BOTH name and number.
-- Google Drive backup (`data/DriveBackup.kt`): after every completed month (`DraftScreen.finish`) the same zip as Settings -> Backup is written as ONE file
-  (`water-splitter-backup.zip`, replaced each time) into a folder "Water Splitter data backup". It uses Android's folder picker (`OpenDocumentTree`),
-  so there is no Google sign-in or API key; it only works when the Google Drive app is installed on the phone (Drive then appears in the picker) and a
-  folder was chosen in App Settings (or via the nudge on a month page). The chosen folder is stored in SharedPreferences "drive-backup", not data.json.
-  Tested only against an ordinary local folder (the S21 FE has no Drive app); real Drive is untested. Home has a "?" Help button (`HelpScreen`)
-  with the 3-step routine: download the invoice from the email, save the meter photo in WhatsApp, then start a new month in the app.
+- Google Drive backup (`data/DriveBackup.kt`): after every completed month (`DraftScreen.finish`) the same zip as Settings -> Backup is uploaded as ONE file
+  (`water-splitter-backup.zip`, replaced each time) to a Drive folder "Water Splitter data backup", straight through the Drive REST API with the
+  `drive.file` scope (the app only sees what it created). Google's authorization library (`play-services-auth`) gives the access token after a
+  one-time consent screen; no Drive app and no API key/secret in the app. Google must know the app: an Android OAuth client per signing key
+  (package + SHA-1) in a Cloud project, see `docs/DRIVE_BACKUP.md`. The connected account is in SharedPreferences "drive-backup", not data.json.
+  NOT yet tested end to end (needs that Cloud setup); the "not set up" and cancel paths are tested. Home has a "?" Help button (`HelpScreen`) with
+  the 3-step routine: download the invoice from the email, save the meter photo in WhatsApp, then start a new month in the app.
 - Share target: `MainActivity` (launchMode singleTask) accepts SEND / SEND_MULTIPLE for PDF, images and octet-stream. `share/Incoming.kt`
   copies the content URI at once (Gmail's grant is short-lived) and sniffs the real type from the file's first bytes.
   `ui/ImportScreen.kt` asks "invoice or meter photo?" and "which month?".

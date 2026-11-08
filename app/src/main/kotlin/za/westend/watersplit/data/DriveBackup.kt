@@ -1,16 +1,25 @@
 package za.westend.watersplit.data
 
+import android.accounts.Account
 import android.content.Context
-import android.content.Intent
-import android.net.Uri
-import android.provider.DocumentsContract
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.google.android.gms.auth.api.identity.AuthorizationRequest
+import com.google.android.gms.auth.api.identity.AuthorizationResult
+import com.google.android.gms.auth.api.identity.Identity
+import com.google.android.gms.common.api.ApiException
+import com.google.android.gms.common.api.Scope
+import com.google.android.gms.tasks.Tasks
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import org.json.JSONObject
+import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
+import java.net.URLEncoder
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
@@ -18,17 +27,19 @@ import java.time.format.DateTimeFormatter
  * Keeps one backup file ("water-splitter-backup.zip", the same zip as Settings -> Backup) in a folder called
  * "Water Splitter data backup" in the person's Google Drive, refreshed every time a month is completed.
  *
- * It uses Android's own folder picker (Google Drive shows up in it), so the app never signs in to Google and holds no
- * Drive permission beyond the one folder she chose. The folder choice lives in this phone's preferences, not in data.json,
- * so restoring a backup on another phone never points at a folder that isn't there.
+ * It talks to Google Drive directly (no Drive app, no folder picker). The person agrees once on Google's own consent screen; after that
+ * the backup runs by itself. The permission asked for is `drive.file`: the app can only see files and folders it created itself, never
+ * the rest of her Drive. Google must know the app (a Cloud project with an Android OAuth client for this package and signing key;
+ * see docs/DRIVE_BACKUP.md), otherwise Google refuses and the person is told it isn't set up.
  */
 object DriveBackup {
     const val FOLDER_NAME = "Water Splitter data backup"
     const val FILE_NAME = "water-splitter-backup.zip"
+    private const val SCOPE = "https://www.googleapis.com/auth/drive.file"
     private const val PREFS = "drive-backup"
-    private const val RW = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+    private const val FOLDER_MIME = "application/vnd.google-apps.folder"
 
-    /** A folder has been chosen. */
+    /** She has connected a Google account. */
     var configured by mutableStateOf(false)
         private set
 
@@ -43,98 +54,136 @@ object DriveBackup {
 
     fun load(context: Context) {
         val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        configured = p.getString("tree", null) != null
+        configured = p.getString("account", null) != null
         summary = p.getString("summary", "").orEmpty()
     }
 
-    /**
-     * [picked] is any folder she chose in the folder picker (for Google Drive, normally "My Drive"). The backup goes into a folder
-     * named [FOLDER_NAME] inside it, which is created when it isn't there yet (or used directly if she picked a folder of that name).
-     * Returns a sentence to show when it didn't work, or null. Do not call on the main thread.
-     */
-    fun setUp(context: Context, picked: Uri): String? = try {
-        val cr = context.contentResolver
-        cr.takePersistableUriPermission(picked, RW)
-        val treeId = DocumentsContract.getTreeDocumentId(picked)
-        val pickedDoc = DocumentsContract.buildDocumentUriUsingTree(picked, treeId)
-        val folderId = if (displayName(context, pickedDoc) == FOLDER_NAME) {
-            treeId
-        } else {
-            findChild(context, picked, treeId, FOLDER_NAME, folder = true)
-                ?: DocumentsContract.createDocument(cr, pickedDoc, DocumentsContract.Document.MIME_TYPE_DIR, FOLDER_NAME)
-                    ?.let { DocumentsContract.getDocumentId(it) }
-                ?: error("folder not created")
-        }
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-            .putString("tree", picked.toString())
-            .putString("folderId", folderId)
-            .apply()
+    /** The question to ask Google: "may this app create and change its own files in my Drive?" */
+    fun request(accountEmail: String? = null): AuthorizationRequest =
+        AuthorizationRequest.builder()
+            .setRequestedScopes(listOf(Scope(SCOPE)))
+            .apply { if (accountEmail != null) setAccount(Account(accountEmail, "com.google")) }
+            .build()
+
+    /** Google said yes (on the consent screen or silently): remember which account, and make the first backup. */
+    fun onConnected(context: Context, result: AuthorizationResult) {
+        val email = result.toGoogleSignInAccount()?.email ?: return
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString("account", email).apply()
         configured = true
-        null
-    } catch (e: Exception) {
-        "That folder couldn't be used. Choose a folder in your Google Drive (for example My Drive) and try again."
+        backupAsync(context)
     }
 
-    /** Writes the backup now (if a folder was chosen). Safe to call from anywhere; it runs in the background. */
+    /** A sentence for the person when Google refuses or can't be reached. */
+    fun explain(e: Exception): String = when {
+        e is ApiException && e.statusCode == 10 ->
+            "Google doesn't know this version of the app yet, so Drive backup isn't available. (The Google Cloud setup in docs/DRIVE_BACKUP.md is missing.)"
+        e is ApiException && e.statusCode == 7 -> "No internet connection. Try again when you're online."
+        e is ApiException && e.statusCode == 16 -> "That was cancelled."
+        else -> "Couldn't connect to Google Drive (${e.javaClass.simpleName}). Please try again."
+    }
+
+    /** Stops backing up (what is already in Drive stays). */
+    fun disconnect(context: Context) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().clear().apply()
+        configured = false
+        summary = ""
+    }
+
+    /** Writes the backup now (if connected). Safe to call from anywhere; it runs in the background. */
     fun backupAsync(context: Context) {
         if (!configured || running) return
         val app = context.applicationContext
         running = true
         scope.launch {
-            val result = runCatching { backupBlocking(app) }
-            val text = result.fold(
-                { "Backed up to Google Drive on " + LocalDateTime.now().format(DateTimeFormatter.ofPattern("d MMM yyyy 'at' HH:mm")) + "." },
-                { "The last backup to Google Drive didn't work. It is tried again each time a month is completed, or tap Back up now." },
-            )
+            val text = try {
+                backupBlocking(app)
+                "Backed up to Google Drive on " + LocalDateTime.now().format(DateTimeFormatter.ofPattern("d MMM yyyy 'at' HH:mm")) + "."
+            } catch (e: NeedsReconnect) {
+                "Google Drive needs to be connected again. Tap Connect Google Drive."
+            } catch (e: Exception) {
+                "The last backup to Google Drive didn't work (no internet?). It is tried again each time a month is completed, or tap Back up now."
+            }
             app.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString("summary", text).apply()
             summary = text
             running = false
         }
     }
 
+    private class NeedsReconnect : Exception()
+
     private fun backupBlocking(context: Context) {
         val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        val tree = Uri.parse(p.getString("tree", null) ?: error("no folder"))
-        val folderId = p.getString("folderId", null) ?: error("no folder")
-        val cr = context.contentResolver
-        val folderUri = DocumentsContract.buildDocumentUriUsingTree(tree, folderId)
-        // One file only: the old one is replaced.
-        findChild(context, tree, folderId, FILE_NAME, folder = false)?.let {
-            DocumentsContract.deleteDocument(cr, DocumentsContract.buildDocumentUriUsingTree(tree, it))
+        val email = p.getString("account", null) ?: throw NeedsReconnect()
+        val result = Tasks.await(Identity.getAuthorizationClient(context).authorize(request(email)))
+        // Google wants the person to agree again (consent withdrawn, or she changed her password).
+        if (result.hasResolution()) throw NeedsReconnect()
+        val token = result.accessToken ?: throw NeedsReconnect()
+
+        val zip = File(context.cacheDir, "drive-backup.zip")
+        try {
+            zip.outputStream().use { Backup.write(context, it) }
+            val folderId = findOne(token, "name = '$FOLDER_NAME' and mimeType = '$FOLDER_MIME' and trashed = false")
+                ?: createFolder(token)
+            var fileId = findOne(token, "'$folderId' in parents and name = '$FILE_NAME' and trashed = false")
+            if (fileId == null) fileId = createFileEntry(token, folderId)
+            upload(token, fileId, zip)
+        } finally {
+            zip.delete()
         }
-        val doc = DocumentsContract.createDocument(cr, folderUri, "application/zip", FILE_NAME) ?: error("file not created")
-        val out = cr.openOutputStream(doc, "w") ?: error("can't write")
-        Backup.write(context, out)
     }
 
-    /** Stops using the chosen folder (the backup already in it stays). */
-    fun forget(context: Context) {
-        val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        p.getString("tree", null)?.let { runCatching { context.contentResolver.releasePersistableUriPermission(Uri.parse(it), RW) } }
-        p.edit().clear().apply()
-        configured = false
-        summary = ""
+    private fun findOne(token: String, query: String): String? {
+        val url = "https://www.googleapis.com/drive/v3/files?q=${URLEncoder.encode(query, "UTF-8")}&fields=files(id)&spaces=drive&pageSize=1"
+        val files = JSONObject(call("GET", url, token)).optJSONArray("files")
+        return if (files != null && files.length() > 0) files.getJSONObject(0).getString("id") else null
     }
 
-    private fun displayName(context: Context, docUri: Uri): String? =
-        context.contentResolver.query(docUri, arrayOf(DocumentsContract.Document.COLUMN_DISPLAY_NAME), null, null, null)?.use { c ->
-            if (c.moveToFirst()) c.getString(0) else null
-        }
+    private fun createFolder(token: String): String {
+        val body = JSONObject().put("name", FOLDER_NAME).put("mimeType", FOLDER_MIME).toString()
+        return JSONObject(call("POST", "https://www.googleapis.com/drive/v3/files?fields=id", token, body.toByteArray(), "application/json")).getString("id")
+    }
 
-    /** Document id of the child of [parentId] called [name] (a folder or a file), or null. */
-    private fun findChild(context: Context, tree: Uri, parentId: String, name: String, folder: Boolean): String? {
-        val children = DocumentsContract.buildChildDocumentsUriUsingTree(tree, parentId)
-        val columns = arrayOf(
-            DocumentsContract.Document.COLUMN_DOCUMENT_ID,
-            DocumentsContract.Document.COLUMN_DISPLAY_NAME,
-            DocumentsContract.Document.COLUMN_MIME_TYPE,
-        )
-        context.contentResolver.query(children, columns, null, null, null)?.use { c ->
-            while (c.moveToNext()) {
-                val isDir = c.getString(2) == DocumentsContract.Document.MIME_TYPE_DIR
-                if (c.getString(1) == name && isDir == folder) return c.getString(0)
+    private fun createFileEntry(token: String, folderId: String): String {
+        val body = JSONObject().put("name", FILE_NAME).put("mimeType", "application/zip").put("parents", org.json.JSONArray().put(folderId)).toString()
+        return JSONObject(call("POST", "https://www.googleapis.com/drive/v3/files?fields=id", token, body.toByteArray(), "application/json")).getString("id")
+    }
+
+    /** Replaces the content of the file (so there is only ever one backup). */
+    private fun upload(token: String, fileId: String, zip: File) {
+        val url = URL("https://www.googleapis.com/upload/drive/v3/files/$fileId?uploadType=media")
+        val conn = url.openConnection() as HttpURLConnection
+        try {
+            conn.requestMethod = "POST"
+            conn.setRequestProperty("X-HTTP-Method-Override", "PATCH") // HttpURLConnection can't send PATCH itself
+            conn.setRequestProperty("Authorization", "Bearer $token")
+            conn.setRequestProperty("Content-Type", "application/zip")
+            conn.connectTimeout = 20_000
+            conn.readTimeout = 120_000
+            conn.doOutput = true
+            conn.setFixedLengthStreamingMode(zip.length())
+            zip.inputStream().use { input -> conn.outputStream.use { input.copyTo(it) } }
+            if (conn.responseCode !in 200..299) error("upload failed: ${conn.responseCode}")
+        } finally {
+            conn.disconnect()
+        }
+    }
+
+    private fun call(method: String, url: String, token: String, body: ByteArray? = null, contentType: String? = null): String {
+        val conn = URL(url).openConnection() as HttpURLConnection
+        try {
+            conn.requestMethod = method
+            conn.setRequestProperty("Authorization", "Bearer $token")
+            conn.connectTimeout = 20_000
+            conn.readTimeout = 30_000
+            if (body != null) {
+                conn.doOutput = true
+                conn.setRequestProperty("Content-Type", contentType ?: "application/json")
+                conn.outputStream.use { it.write(body) }
             }
+            if (conn.responseCode !in 200..299) error("Drive answered ${conn.responseCode}")
+            return conn.inputStream.bufferedReader().use { it.readText() }
+        } finally {
+            conn.disconnect()
         }
-        return null
     }
 }
