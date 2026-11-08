@@ -216,6 +216,12 @@ private fun BackupPanel(store: Store) {
         )
         Text("Backups are kept in: ${BackupLocation.where}", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
         if (BackupLocation.summary.isNotBlank()) Text(BackupLocation.summary, style = MaterialTheme.typography.bodySmall)
+        if (PermissionStatus.needsAllFiles()) {
+            Text("To save backups there, Android needs your OK first.", color = MaterialTheme.colorScheme.error)
+            OutlinedButton(onClick = { context.startActivity(PermissionStatus.allFilesAccessIntent(context)) }, modifier = Modifier.fillMaxWidth()) {
+                Text("Allow file access for backups")
+            }
+        }
         Button(
             onClick = {
                 message = null

@@ -167,7 +167,7 @@ fun SetupScreen(
         when (step) {
             0 -> {
                 Text(
-                    "Two quick permissions. Water Splitter updates itself from the internet, and it can remind you when the invoice is due.",
+                    "A few quick permissions. Water Splitter updates itself from the internet, reminds you when the invoice is due, and saves a backup of your data on this phone.",
                     style = MaterialTheme.typography.bodyLarge,
                 )
                 Panel {
@@ -209,7 +209,21 @@ fun SetupScreen(
                         ) { Text(if (notificationsAsked) "Open notification settings" else "Allow notifications") }
                     }
                 }
-                val allDone = Updater.installAllowed && notificationsAllowed
+                if (Build.VERSION.SDK_INT >= 30) {
+                    Panel {
+                        SectionTitle("Allow file access")
+                        if (PermissionStatus.allFilesAllowed) {
+                            Text("✓ File access is allowed.", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                        } else {
+                            Text("So backups can be saved in ${BackupLocation.DEFAULT_LABEL}. Tap the button, switch on \"Allow access to manage all files\", then press Back.")
+                            Button(
+                                onClick = { context.startActivity(PermissionStatus.allFilesAccessIntent(context)) },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) { Text("Allow file access") }
+                        }
+                    }
+                }
+                val allDone = Updater.installAllowed && notificationsAllowed && !PermissionStatus.needsAllFiles()
                 if (allDone) {
                     Button(onClick = { onStep(1) }, modifier = Modifier.fillMaxWidth().height(56.dp)) {
                         Text("Next", style = MaterialTheme.typography.titleMedium)

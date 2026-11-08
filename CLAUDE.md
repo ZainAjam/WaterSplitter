@@ -39,18 +39,21 @@ Business rules: `docs/RULES.md`. Read it before touching `Calculator.kt`.
   send" a dialog offers to delete those originals (`DraftScreen.finish`); files that arrive through the share sheet have no `sourceUri` and are
   never deleted. Settings hub = Tenants, Service Settings, App Settings. "Find in my contacts" fills BOTH name and number.
 - Backup location (`data/BackupLocation.kt`, UI in `ui/AlertBanners.kt` + `SettingsScreen.BackupPanel`): after every completed month (`DraftScreen.finish`) and on
-  "Save a backup", ONE file `water-splitter-backup.zip` (replaced each time) is written. DEFAULT location: `Download/Water Splitter data backup/` on the phone,
-  written through MediaStore (no permission, Android 10+). She can instead pick a folder once in Android's folder picker (`OpenDocumentTree`: phone
-  storage, Google Drive, OneDrive...); the app creates/uses a folder "Water Splitter data backup" inside it (name matched ignoring capitals).
-  Android refuses the very top of a drive, so she creates/opens a folder in the picker. "Save a copy somewhere else" = Android's Save screen.
-  The choice ("folder" or "default") is in SharedPreferences "backup-location", not data.json. Folder choice tested on real Google Drive on the S21 FE.
+  "Save a backup", ONE file `water-splitter-backup.zip` (replaced each time, written via a .tmp + rename) is written. DEFAULT location on Android 11+:
+  `Backups/Water Splitter/` at the top of internal storage (`/storage/emulated/0/Backups/Water Splitter`), which only works with the "All files access"
+  permission (`MANAGE_EXTERNAL_STORAGE`; asked by the red banner, wizard step 1 and the Backup panel, `PermissionStatus.allFilesAllowed`; only needed while
+  no folder was chosen). Phones older than Android 11 fall back to `Download/Water Splitter data backup` through MediaStore (no permission). She can
+  instead pick a folder once in Android's folder picker (`OpenDocumentTree`: phone storage, Google Drive, OneDrive...); the app creates/uses a folder
+  "Water Splitter data backup" inside it (name matched ignoring capitals). Android refuses the very top of a drive, so she creates/opens a folder in the
+  picker. "Save a copy somewhere else" = Android's Save screen. The choice ("folder" or "default") is in SharedPreferences "backup-location", not
+  data.json. Folder choice tested on real Google Drive on the S21 FE.
 - Home banners, top of the screen, in this order and colours: (1) `PermissionAlertBanner` light red: one button per missing permission (install unknown
-  apps [only when the update repo is set], notifications); (2) `SettingsAlertBanner` light orange: backup location not decided yet, says where the default
-  goes, "Choose backup location" or "Ignore - keep the default location" (the banner then goes away); (3) the update banner light green
-  (`Updater.available`, "Download and install"). Colours are in `BannerColors` (light and dark variants). `PermissionStatus` and `Updater.installAllowed`
-  are refreshed in `MainActivity.onResume`.
-- Wizard is 7 steps: 1 allow updates + notifications, 2 restore, 3 backup location (choose a folder, or "Keep the default location"), 4 current tenants,
-  5 earlier tenants, 6 reminders, 7 Claude key. A restore that brings tenants back goes 3 -> 7.
+  apps [only when the update repo is set], notifications, file access for the default backup folder); (2) `SettingsAlertBanner` light orange: backup
+  location not decided yet, says where the default goes, "Choose backup location" or "Ignore - keep the default location" (the banner then goes away);
+  (3) the update banner light green (`Updater.available`, "Download and install"). Colours are in `BannerColors` (light and dark variants).
+  `PermissionStatus` and `Updater.installAllowed` are refreshed in `MainActivity.onResume`.
+- Wizard is 7 steps: 1 allow updates + notifications + file access, 2 restore, 3 backup location (choose a folder, or "Keep the default location"),
+  4 current tenants, 5 earlier tenants, 6 reminders, 7 Claude key. A restore that brings tenants back goes 3 -> 7.
 - Share target: `MainActivity` (launchMode singleTask) accepts SEND / SEND_MULTIPLE for PDF, images and octet-stream. `share/Incoming.kt`
   copies the content URI at once (Gmail's grant is short-lived) and sniffs the real type from the file's first bytes.
   `ui/ImportScreen.kt` asks "invoice or meter photo?" and "which month?".

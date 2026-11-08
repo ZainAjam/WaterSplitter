@@ -4,6 +4,7 @@ import android.content.ContentUris
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
@@ -16,14 +17,16 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import java.io.File
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
 /**
  * Where backups go.
  *
- * By default the backup goes into the Downloads folder on this phone ("Download/Water Splitter data backup"), written by the app itself
- * (no permission needed). She can instead pick a folder once, in Android's folder picker: on the phone, or in any app that offers its
+ * By default the backup goes into "Backups/Water Splitter" in the phone's internal storage (Android 11+ lets an app create a top-level folder
+ * only with the "All files access" permission, which the permission banner asks for; older phones use Download/Water Splitter data backup).
+ * She can instead pick a folder once, in Android's folder picker: on the phone, or in any app that offers its
  * storage there (Google Drive, OneDrive...). Either way "Save a backup" and the automatic backup after every completed month write
  * ONE file ("water-splitter-backup.zip", the same zip as always) there and replace it each time.
  *
@@ -54,8 +57,16 @@ object BackupLocation {
     var running by mutableStateOf(false)
         private set
 
+    private const val DEFAULT_PARENT = "Backups"
+    private const val DEFAULT_FOLDER = "Water Splitter"
+
     /** Where the backup goes when no folder was chosen. */
-    const val DEFAULT_LABEL = "the Downloads folder on this phone (Download/$FOLDER_NAME)"
+    val DEFAULT_LABEL: String
+        get() = if (Build.VERSION.SDK_INT >= 30) {
+            "the $DEFAULT_PARENT/$DEFAULT_FOLDER folder in this phone's internal storage"
+        } else {
+            "the Downloads folder on this phone (Download/$FOLDER_NAME)"
+        }
 
     /** Where backups are going right now, in words. */
     val where: String get() = if (configured) label else DEFAULT_LABEL
@@ -124,10 +135,16 @@ object BackupLocation {
         val app = context.applicationContext
         running = true
         scope.launch {
-            val result = runCatching { if (configured) backupBlocking(app) else backupToDownloadsBlocking(app) }
+            val result = runCatching { if (configured) backupBlocking(app) else backupToDefaultBlocking(app) }
             val text = result.fold(
                 { "Backed up on " + LocalDateTime.now().format(DateTimeFormatter.ofPattern("d MMM yyyy 'at' HH:mm")) + "." },
-                { "The last backup didn't work (no internet, or the folder was removed?). It is tried again each time a month is completed, or tap Save a backup." },
+                { e ->
+                    if (e is NeedsFileAccess) {
+                        "To save backups in $DEFAULT_PARENT/$DEFAULT_FOLDER, allow file access (the red button at the top of the main screen)."
+                    } else {
+                        "The last backup didn't work (no internet, or the folder was removed?). It is tried again each time a month is completed, or tap Save a backup."
+                    }
+                },
             )
             app.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString("summary", text).apply()
             summary = text
@@ -135,7 +152,30 @@ object BackupLocation {
         }
     }
 
-    /** The default: Download/Water Splitter data backup/water-splitter-backup.zip, replaced each time. Needs Android 10 or newer. */
+    private class NeedsFileAccess : Exception()
+
+    /** The default location, replaced each time: Backups/Water Splitter on Android 11+ (needs All files access), else Download/. */
+    private fun backupToDefaultBlocking(context: Context) {
+        if (Build.VERSION.SDK_INT >= 30) {
+            if (!Environment.isExternalStorageManager()) throw NeedsFileAccess()
+            val dir = File(Environment.getExternalStorageDirectory(), "$DEFAULT_PARENT/$DEFAULT_FOLDER")
+            dir.mkdirs()
+            check(dir.isDirectory) { "can't create the folder" }
+            val tmp = File(dir, "$FILE_NAME.tmp")
+            tmp.outputStream().use { Backup.write(context, it) }
+            val target = File(dir, FILE_NAME)
+            if (!tmp.renameTo(target)) {
+                target.delete()
+                check(tmp.renameTo(target)) { "can't replace the old backup" }
+            }
+            // so file managers and the picker see it straight away
+            MediaScannerConnection.scanFile(context, arrayOf(target.path), arrayOf("application/zip"), null)
+        } else {
+            backupToDownloadsBlocking(context)
+        }
+    }
+
+    /** Older phones: Download/Water Splitter data backup/water-splitter-backup.zip through MediaStore (no permission). */
     private fun backupToDownloadsBlocking(context: Context) {
         check(Build.VERSION.SDK_INT >= 29) { "needs Android 10" }
         val cr = context.contentResolver

@@ -4,7 +4,9 @@ import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
+import android.os.Environment
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -38,7 +40,19 @@ object PermissionStatus {
     var notificationsAllowed by mutableStateOf(true)
         private set
 
+    /** "All files access", which the default backup folder in internal storage needs (Android 11 and newer). */
+    var allFilesAllowed by mutableStateOf(true)
+        private set
+
+    /** Only while backups go to the default folder; a folder she chose herself needs no permission. */
+    fun needsAllFiles(): Boolean = Build.VERSION.SDK_INT >= 30 && !BackupLocation.configured && !allFilesAllowed
+
+    fun allFilesAccessIntent(context: Context): Intent =
+        Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:${context.packageName}"))
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
     fun refresh(context: Context) {
+        allFilesAllowed = Build.VERSION.SDK_INT < 30 || Environment.isExternalStorageManager()
         notificationsAllowed = Build.VERSION.SDK_INT < 33 ||
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
     }
@@ -106,7 +120,8 @@ fun PermissionAlertBanner() {
     val context = LocalContext.current
     val needInstall = Updater.isConfigured && !Updater.installAllowed
     val needNotifications = !PermissionStatus.notificationsAllowed
-    if (!needInstall && !needNotifications) return
+    val needFiles = PermissionStatus.needsAllFiles()
+    if (!needInstall && !needNotifications && !needFiles) return
 
     val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         PermissionStatus.refresh(context)
@@ -132,6 +147,12 @@ fun PermissionAlertBanner() {
                 },
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("Allow notifications") }
+        }
+        if (needFiles) {
+            Text("Let Water Splitter save your backup in ${BackupLocation.DEFAULT_LABEL}.")
+            Button(onClick = { context.startActivity(PermissionStatus.allFilesAccessIntent(context)) }, modifier = Modifier.fillMaxWidth()) {
+                Text("Allow file access for backups")
+            }
         }
     }
 }
