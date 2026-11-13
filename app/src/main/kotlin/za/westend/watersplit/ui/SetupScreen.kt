@@ -45,7 +45,7 @@ import za.westend.watersplit.engine.Tenancy
 import za.westend.watersplit.engine.TenantBook
 import za.westend.watersplit.engine.TenantSave
 
-const val SETUP_STEPS = 7
+const val SETUP_STEPS = 6
 
 /** True when the app may post notifications (always true before Android 13). */
 private fun notificationsGranted(context: Context): Boolean =
@@ -61,16 +61,17 @@ private fun SkipButton(text: String, onClick: () -> Unit) {
 }
 
 /** What is typed for one house in step 1, before it is saved. */
-private class TenantForm(open: Tenancy?) {
+private class TenantForm(open: Tenancy?, livesByDefault: Boolean) {
     val id: String? = open?.id
-    var lives by mutableStateOf(true)
+    var lives by mutableStateOf(open != null || livesByDefault)
     var name by mutableStateOf(open?.name ?: "")
     var whatsapp by mutableStateOf(open?.whatsapp ?: "")
     var from by mutableStateOf(open?.from ?: MonthKey.current())
 }
 
 /**
- * The first-time wizard: 1 allow updates and notifications, 2 restore a backup, 3 backup location, 4 current tenants, 5 earlier tenants (optional), 6 reminders, 7 Claude key.
+ * The first-time wizard: 1 allow updates, notifications and file access, 2 restore a backup, 3 current tenants, 4 earlier tenants (optional), 5 reminders, 6 Claude key.
+ * A restored backup skips nothing: every step simply shows what the backup brought back.
  * The tenants are saved when she presses Next, so going back and forth loses nothing.
  */
 @Composable
@@ -85,22 +86,18 @@ fun SetupScreen(
     // Bumped after a backup is restored so the typed-in forms are rebuilt from the restored tenants.
     var generation by remember { mutableIntStateOf(0) }
     val forms = remember(generation) {
-        House.entries.associateWith { h -> TenantForm(TenantBook.forHouse(store.tenancies, h).firstOrNull { it.to == null }) }
+        // After a restore a house without a current tenant stays "vacant" instead of asking for a name.
+        House.entries.associateWith { h -> TenantForm(TenantBook.forHouse(store.tenancies, h).firstOrNull { it.to == null }, store.tenancies.isEmpty()) }
     }
     var problem by remember { mutableStateOf<String?>(null) }
     var restoreMessage by remember { mutableStateOf<String?>(null) }
-    // After a restore that brought the tenants back, the tenant and reminder steps are already done.
-    var restoredWithTenants by remember { mutableStateOf(false) }
-    var locationProblem by remember { mutableStateOf<String?>(null) }
-    val chooseLocation = rememberBackupLocationPicker { locationProblem = it }
     val restore = rememberRestoreFromBackup(
         store,
         confirm = false,
         onRestored = {
             problem = null
-            // The backup brings the tenants, months and settings; the Claude key is never in a backup, so go on to that step.
-            restoredWithTenants = store.tenancies.isNotEmpty()
-            if (!restoredWithTenants) generation++
+            // The backup brings the tenants, months and settings. The next steps show them so she can change anything; no step is skipped.
+            generation++
             onStep(2)
         },
         onResult = { restoreMessage = it },
@@ -255,38 +252,6 @@ fun SetupScreen(
 
             2 -> {
                 Text(
-                    "Where should backups be kept? After every finished month the app saves a backup by itself. If you do nothing, it goes in " +
-                        "${BackupLocation.DEFAULT_LABEL}. Or choose another location once (on this phone, in Google Drive, OneDrive or another app).",
-                    style = MaterialTheme.typography.bodyLarge,
-                )
-                Panel {
-                    SectionTitle("Backup location")
-                    if (BackupLocation.configured) {
-                        Text("✓ Backups will be kept in: ${BackupLocation.label}", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
-                    } else if (BackupLocation.choiceMade) {
-                        Text("✓ Backups will be kept in ${BackupLocation.DEFAULT_LABEL}.", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
-                    } else {
-                        Text(BACKUP_PICKER_HELP, style = MaterialTheme.typography.bodySmall)
-                    }
-                    Button(onClick = chooseLocation, modifier = Modifier.fillMaxWidth()) {
-                        Text(if (BackupLocation.configured) "Choose a different folder" else "Choose a backup location")
-                    }
-                    locationProblem?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                }
-                if (BackupLocation.choiceMade) {
-                    Button(onClick = { onStep(if (restoredWithTenants) 6 else 3) }, modifier = Modifier.fillMaxWidth().height(56.dp)) {
-                        Text("Next", style = MaterialTheme.typography.titleMedium)
-                    }
-                } else {
-                    SkipButton("Keep the default location") {
-                        BackupLocation.useDefault(context)
-                        onStep(if (restoredWithTenants) 6 else 3)
-                    }
-                }
-            }
-
-            3 -> {
-                Text(
                     "Who lives in the two houses now? Statements are sent to the WhatsApp number you give here.",
                     style = MaterialTheme.typography.bodyMedium,
                 )
@@ -342,12 +307,12 @@ fun SetupScreen(
                 }
                 problem?.let { Panel(container = MaterialTheme.colorScheme.errorContainer) { Text(it, color = MaterialTheme.colorScheme.onErrorContainer) } }
                 Button(
-                    onClick = { if (saveCurrentTenants()) onStep(4) },
+                    onClick = { if (saveCurrentTenants()) onStep(3) },
                     modifier = Modifier.fillMaxWidth().height(56.dp),
                 ) { Text("Next", style = MaterialTheme.typography.titleMedium) }
             }
 
-            4 -> {
+            3 -> {
                 Text(
                     "If you want the earlier months to show who was invoiced, add previous tenants too. This is optional: " +
                         "you can add them any time under Settings, Tenant Settings.",
@@ -366,18 +331,18 @@ fun SetupScreen(
                         }
                     }
                 }
-                Button(onClick = { onStep(5) }, modifier = Modifier.fillMaxWidth().height(56.dp)) {
+                Button(onClick = { onStep(4) }, modifier = Modifier.fillMaxWidth().height(56.dp)) {
                     Text("Next", style = MaterialTheme.typography.titleMedium)
                 }
             }
 
-            5 -> {
+            4 -> {
                 Text(
                     "The municipal invoice arrives by email around the 24th. Choose the day of the month you want a reminder from.",
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 RemindersPanel(store)
-                Button(onClick = { onStep(6) }, modifier = Modifier.fillMaxWidth().height(56.dp)) {
+                Button(onClick = { onStep(5) }, modifier = Modifier.fillMaxWidth().height(56.dp)) {
                     Text("Next", style = MaterialTheme.typography.titleMedium)
                 }
             }
@@ -400,7 +365,7 @@ fun SetupScreen(
             }
         }
 
-        if (step in 4..5) {
+        if (step in 3..4) {
             SkipButton("Skip this step") { onStep(step + 1) }
         }
     }

@@ -17,10 +17,10 @@ Business rules: `docs/RULES.md`. Read it before touching `Calculator.kt`.
   drafts and previous months. Cog -> `SettingsScreen` hub -> Tenants, Service Settings (municipal account, meter serial + last reading,
   statement address/name) and App Settings (Claude key, reminders incl. `Settings.reminderDay`, backup, updates). Sub-screens use the
   `BackArrow` icon, never a "Back" word. `Screen` carries its own `back` target (see `AppRoot.parentOf`).
-- First-time wizard (`ui/SetupScreen.kt`, 7 steps, shown while `Settings.setupDone` is false; installs that already have tenants skip it):
-  1 allow installing updates + notifications + access to files (all skippable), 2 restore a backup (or "I don't have a backup"), 3 backup location (choose a folder,
-  or keep the default), 4 current tenants (name + valid WhatsApp number each, or "nobody lives here"), 5 earlier tenants (optional), 6 reminders
-  (day of month), 7 Claude key. A restore that brings tenants back goes 3 -> 7 (the key is never in a backup).
+- First-time wizard (`ui/SetupScreen.kt`, 6 steps, shown while `Settings.setupDone` is false; installs that already have tenants skip it):
+  1 allow installing updates + notifications + access to files (all skippable), 2 restore a backup (or "I don't have a backup"), 3 current tenants (name + valid WhatsApp
+  number each, or "nobody lives here"), 4 earlier tenants (optional), 5 reminders (day of month), 6 Claude key. There is NO backup-location step (set in Settings -> App Settings ->
+  Backup). A restore skips nothing: it goes on to step 3 and every step shows the values the backup brought back (the key is never in a backup).
   A backup is ONE zip; restore is `rememberRestoreFromBackup`, shared with Settings -> Backup. See the "Backup location" and "Home banners" notes
   below for what Home shows at the top after the wizard (permissions/location banner, then the update banner).
   The updater lists `/releases` (not `/latest`) so prereleases count; every `v0.*` tag is published as a prerelease.
@@ -52,8 +52,6 @@ Business rules: `docs/RULES.md`. Read it before touching `Calculator.kt`.
   apps, notifications, all-files access); (2) the update banner light green (`Updater.available`, "Download and install"). There is NO banner for the backup
   location: it is only in the wizard and Settings -> App Settings -> Backup ("Location for auto-backups", "Change auto-backup location"). Colours are in
   `BannerColors` (light and dark variants). `PermissionStatus` and `Updater.installAllowed` are refreshed in `MainActivity.onResume`.
-- Wizard is 7 steps: 1 allow updates + notifications + access to files, 2 restore a backup, 3 backup location (choose a folder, or "Keep the default location"),
-  4 current tenants, 5 earlier tenants, 6 reminders, 7 Claude key. A restore that brings tenants back goes 3 -> 7.
 - Share target: `MainActivity` (launchMode singleTask) accepts SEND / SEND_MULTIPLE for PDF, images and octet-stream. `share/Incoming.kt`
   copies the content URI at once (Gmail's grant is short-lived) and sniffs the real type from the file's first bytes.
   `ui/ImportScreen.kt` asks "invoice or meter photo?" and "which month?".
