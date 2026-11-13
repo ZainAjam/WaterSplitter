@@ -17,6 +17,8 @@ import za.westend.watersplit.reminders.ReminderScheduler
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -32,6 +34,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -39,6 +42,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import za.westend.watersplit.data.Backup
+import za.westend.watersplit.share.FileKind
 import za.westend.watersplit.data.BackupLocation
 import za.westend.watersplit.data.Store
 import za.westend.watersplit.engine.Versions
@@ -214,18 +218,27 @@ private fun BackupPanel(store: Store) {
                 "one by itself after every finished month. The Claude key is not included.",
             style = MaterialTheme.typography.bodyMedium,
         )
-        Text("Backup location: ${BackupLocation.where}", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
-        if (BackupLocation.summary.isNotBlank()) Text(BackupLocation.summary, style = MaterialTheme.typography.bodySmall)
         Button(
             onClick = {
                 message = null
-                save.launch("water-splitter-backup-$stamp.zip")
+                save.launch("water-splitter-backup-$stamp.wsbackup")
             },
             modifier = Modifier.fillMaxWidth(),
         ) { Text("Save a backup") }
         OutlinedButton(onClick = restore, modifier = Modifier.fillMaxWidth()) { Text("Restore a backup") }
-        OutlinedButton(onClick = chooseLocation, modifier = Modifier.fillMaxWidth()) { Text("Change backup location") }
-        Text(BACKUP_PICKER_HELP, style = MaterialTheme.typography.bodySmall)
+        // The auto-backup items are their own section inside the Backup box.
+        HorizontalDivider(Modifier.padding(vertical = 8.dp))
+        Text(
+            "Location for auto-backups: ${BackupLocation.where}",
+            color = MaterialTheme.colorScheme.primary,
+            fontWeight = FontWeight.SemiBold,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        if (BackupLocation.summary.isNotBlank()) {
+            Text(BackupLocation.summary, style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+        }
+        OutlinedButton(onClick = chooseLocation, modifier = Modifier.fillMaxWidth()) { Text("Change auto-backup location") }
         if (BackupLocation.configured) {
             TextButton(onClick = { BackupLocation.useDefault(context) }, modifier = Modifier.fillMaxWidth()) {
                 Text("Use the default location again (Documents folder)")
@@ -269,6 +282,23 @@ fun rememberRestoreFromBackup(
     val picker = rememberLauncherForActivityResult(OpenBackupDocument()) { uri ->
         if (uri != null) if (confirm) pending = uri else run(uri)
     }
+    // "Restore a backup" first lists the backups found on the phone; Android's own picker is the way to look elsewhere.
+    var listing by remember { mutableStateOf(false) }
+    if (listing) {
+        FilePickerDialog(
+            kind = FileKind.BACKUP,
+            onPick = { found ->
+                listing = false
+                val uri = Uri.fromFile(found.file)
+                if (confirm) pending = uri else run(uri)
+            },
+            onOther = {
+                listing = false
+                picker.launch(arrayOf("*/*"))
+            },
+            onClose = { listing = false },
+        )
+    }
 
     pending?.let { uri ->
         AlertDialog(
@@ -284,7 +314,7 @@ fun rememberRestoreFromBackup(
             dismissButton = { TextButton(onClick = { pending = null }) { Text("Cancel") } },
         )
     }
-    return { picker.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream")) }
+    return { listing = true }
 }
 /** Save, show or remove the Claude API key that lets the app read invoices and meter photos. */
 @Composable

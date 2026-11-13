@@ -10,6 +10,9 @@
     <!-- Lets the app hand a downloaded update to Android's installer (the person still has to confirm). -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
+    <!-- Lets "Attach invoice" / "Attach meter photo" list the PDFs and photos in Downloads, Documents, DCIM and Pictures (Android 11+ asks once in Settings). -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
+
     <!-- Lets the app see whether WhatsApp is installed (Android 11+ package visibility). -->
     <queries>
         <package android:name="com.whatsapp" />
@@ -50,6 +53,33 @@
                 <data android:mimeType="application/pdf" />
                 <data android:mimeType="image/*" />
                 <data android:mimeType="application/octet-stream" />
+            </intent-filter>
+
+            <!-- Tapping a .wsbackup (whole-app backup) or .wsmonths (months shared by another Water Splitter) file anywhere on the phone. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:host="*" />
+                <data android:mimeType="*/*" />
+                <data android:pathPattern=".*\\.wsbackup" />
+                <data android:pathPattern=".*\\..*\\.wsbackup" />
+                <data android:pathPattern=".*\\..*\\..*\\.wsbackup" />
+                <data android:pathPattern=".*\\.wsmonths" />
+                <data android:pathPattern=".*\\..*\\.wsmonths" />
+                <data android:pathPattern=".*\\..*\\..*\\.wsmonths" />
+            </intent-filter>
+            <!-- The same files when the sender gives them a type of its own, or no readable name. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="application/x-wsbackup" />
+                <data android:mimeType="application/x-wsmonths" />
             </intent-filter>
         </activity>
 

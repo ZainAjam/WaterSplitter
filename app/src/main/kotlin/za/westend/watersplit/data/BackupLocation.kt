@@ -25,19 +25,23 @@ import java.time.format.DateTimeFormatter
  * Drive, OneDrive...). Until she does, it is the Documents folder in the phone's internal storage.
  *
  * "Save a backup" and "Restore a backup" open Android's file picker already in that folder (she can still go to any other folder). The
- * automatic backup after every completed month writes one file, "water-splitter-backup.zip", into the same place and replaces it each
+ * automatic backup after every completed month writes one file, "water-splitter-backup.wsbackup", into the same place and replaces it each
  * time (into the chosen folder, or into Documents through MediaStore, which needs no permission).
  *
  * The choice lives in this phone's preferences, not in data.json, so a restored backup never points at a folder that isn't there.
  */
 object BackupLocation {
-    const val FILE_NAME = "water-splitter-backup.zip"
+    const val FILE_NAME = "water-splitter-backup.wsbackup"
+    private const val MIME = "application/octet-stream" // a specific type would make Android add its own extension
     private const val PREFS = "backup-location"
     private const val RW = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
     private const val EXTERNAL_STORAGE = "com.android.externalstorage.documents"
 
     /** Where backups go until she changes it. */
     const val DEFAULT_LABEL = "the Documents folder on this phone"
+
+    /** Short form for settings: just the folder. */
+    const val DEFAULT_SHORT = "Documents"
 
     /** A folder has been chosen (otherwise the Documents folder is used). */
     var configured by mutableStateOf(false)
@@ -59,7 +63,7 @@ object BackupLocation {
         private set
 
     /** Where backups are going right now, in words. */
-    val where: String get() = if (configured) label else DEFAULT_LABEL
+    val where: String get() = if (configured) label else DEFAULT_SHORT
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -146,7 +150,7 @@ object BackupLocation {
         findChild(context, tree, folderId, FILE_NAME)?.let {
             DocumentsContract.deleteDocument(cr, DocumentsContract.buildDocumentUriUsingTree(tree, it))
         }
-        val doc = DocumentsContract.createDocument(cr, folderUri, "application/zip", FILE_NAME) ?: error("file not created")
+        val doc = DocumentsContract.createDocument(cr, folderUri, MIME, FILE_NAME) ?: error("file not created")
         val out = cr.openOutputStream(doc, "w") ?: error("can't write")
         Backup.write(context, out)
     }
@@ -168,7 +172,7 @@ object BackupLocation {
             collection,
             ContentValues().apply {
                 put(MediaStore.MediaColumns.DISPLAY_NAME, FILE_NAME)
-                put(MediaStore.MediaColumns.MIME_TYPE, "application/zip")
+                put(MediaStore.MediaColumns.MIME_TYPE, MIME)
                 put(MediaStore.MediaColumns.RELATIVE_PATH, relative)
             },
         ) ?: error("can't create the file")

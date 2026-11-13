@@ -71,6 +71,7 @@ fun AppRoot(store: Store, inbox: ShareInbox) {
     // The background fills the whole window (behind the system bars); only the content is inset.
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
+            IncomingPackageDialogs(store, inbox)
             if (incoming != null) {
                 // Something was shared to the app: ask what it is and which month it belongs to first.
                 ImportScreen(
@@ -100,6 +101,7 @@ fun AppRoot(store: Store, inbox: ShareInbox) {
                             onOpen = { screen = Screen.Review(it) },
                             onSettings = { screen = Screen.Settings },
                             onHelp = { screen = Screen.Help },
+                            inbox = inbox,
                         )
                     }
                     Screen.Help -> HelpScreen(onBack = { screen = Screen.Home })

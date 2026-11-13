@@ -35,7 +35,9 @@ object SourceFiles {
      * deleted by this app (then nothing is offered later).
      */
     fun rememberForDelete(context: Context, uri: Uri): String? = try {
-        if (!supportsDelete(context, uri)) {
+        if (uri.scheme == "file") {
+            uri.toString() // found by the app's own scanner: it may delete the file directly
+        } else if (!supportsDelete(context, uri)) {
             null
         } else {
             context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
@@ -52,12 +54,14 @@ object SourceFiles {
 
     /** Gives up the right to delete [stored] (the person chose to keep the original). */
     fun forget(context: Context, stored: String) {
+        if (stored.startsWith("file:")) return
         context.contentResolver.releasePersistableUriPermission(Uri.parse(stored), Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
     }
 
     /** Deletes the original. Returns false when it was already gone, moved, or Android refused. Do not call on the main thread. */
     fun delete(context: Context, stored: String): Boolean {
         val uri = Uri.parse(stored)
+        if (uri.scheme == "file") return uri.path?.let { java.io.File(it).delete() } ?: false
         val ok = try {
             DocumentsContract.deleteDocument(context.contentResolver, uri)
         } catch (e: Exception) {

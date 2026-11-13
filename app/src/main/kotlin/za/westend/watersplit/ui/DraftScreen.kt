@@ -69,6 +69,7 @@ import za.westend.watersplit.engine.Party
 import za.westend.watersplit.engine.ReadingNote
 import za.westend.watersplit.reading.ReaderService
 import za.westend.watersplit.data.BackupLocation
+import za.westend.watersplit.share.FileKind
 import za.westend.watersplit.share.Incoming
 import za.westend.watersplit.share.PickDocumentFrom
 import za.westend.watersplit.share.SourceFiles
@@ -201,6 +202,22 @@ fun DraftScreen(
     }
     val pickInvoice = rememberLauncherForActivityResult(PickDocumentFrom(StartFolder.DOWNLOADS)) { pick(AttachmentKind.INVOICE, it) }
     val pickMeter = rememberLauncherForActivityResult(PickDocumentFrom(StartFolder.WHATSAPP_PICTURES)) { pick(AttachmentKind.METER, it) }
+    // "Attach ..." first shows the app's own list of PDFs / photos found on the phone.
+    var choosing by remember(key) { mutableStateOf<AttachmentKind?>(null) }
+    choosing?.let { kind ->
+        FilePickerDialog(
+            kind = if (kind == AttachmentKind.INVOICE) FileKind.PDF else FileKind.IMAGE,
+            onPick = { found ->
+                choosing = null
+                pick(kind, Uri.fromFile(found.file))
+            },
+            onOther = {
+                choosing = null
+                if (kind == AttachmentKind.INVOICE) pickInvoice.launch(arrayOf("application/pdf")) else pickMeter.launch(arrayOf("image/*"))
+            },
+            onClose = { choosing = null },
+        )
+    }
 
     fun moveTo(target: MonthKey) {
         if (store.occupant(target.key) != Occupant.NONE) {
@@ -282,9 +299,7 @@ fun DraftScreen(
         // ---------------- 1. invoice ----------------
         Panel {
             SectionTitle("1. Municipal invoice")
-            AttachmentArea(store, key, AttachmentKind.INVOICE, draft.invoice, onView) {
-                pickInvoice.launch(arrayOf("application/pdf", "image/*"))
-            }
+            AttachmentArea(store, key, AttachmentKind.INVOICE, draft.invoice, onView) { choosing = AttachmentKind.INVOICE }
             if (invoiceReading) {
                 ReadingProgress("Reading the invoice…")
             } else {
@@ -371,7 +386,7 @@ fun DraftScreen(
         // ---------------- 2. meter ----------------
         Panel {
             SectionTitle("2. Outbuilding water meter")
-            AttachmentArea(store, key, AttachmentKind.METER, draft.meter, onView) { pickMeter.launch(arrayOf("image/*")) }
+            AttachmentArea(store, key, AttachmentKind.METER, draft.meter, onView) { choosing = AttachmentKind.METER }
             if (meterReading) {
                 ReadingProgress("Reading the meter photo…")
             } else {

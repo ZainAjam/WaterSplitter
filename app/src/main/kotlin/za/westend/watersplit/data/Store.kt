@@ -161,6 +161,27 @@ class Store(private val context: Context) {
         return d
     }
 
+    /**
+     * Puts a month from a months file into this phone, replacing a calculated month or a draft of the same name. [files] is the folder
+     * with that month's invoice / photo (or null). Callers ask the person before replacing anything.
+     */
+    fun importMonth(record: MonthRecord, files: File?) {
+        attachmentDir(record.key).deleteRecursively()
+        if (files != null && files.exists()) files.copyRecursively(attachmentDir(record.key), overwrite = true)
+        months = (months.filter { it.key != record.key } + record).sortedBy { it.key }
+        drafts = drafts.filter { it.key != record.key }
+        persist()
+    }
+
+    /** The same for a month that was still in progress when it was shared: it arrives as a draft, with its attachments. */
+    fun importDraft(draft: Draft, files: File?) {
+        attachmentDir(draft.key).deleteRecursively()
+        if (files != null && files.exists()) files.copyRecursively(attachmentDir(draft.key), overwrite = true)
+        months = months.filter { it.key != draft.key }
+        drafts = (drafts.filter { it.key != draft.key } + draft).sortedBy { it.key }
+        persist()
+    }
+
     /** Removes a calculated month and everything attached to it. */
     fun deleteMonth(key: String) {
         months = months.filter { it.key != key }

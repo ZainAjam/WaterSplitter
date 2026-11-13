@@ -29,6 +29,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import za.westend.watersplit.data.BackupLocation
+import za.westend.watersplit.share.FileScanner
 import za.westend.watersplit.update.Updater
 
 /** Whether the app may post notifications, refreshed whenever the app comes to the front. */
@@ -38,7 +39,12 @@ object PermissionStatus {
     var notificationsAllowed by mutableStateOf(true)
         private set
 
+    /** "All files access", needed to list the PDFs and photos on the phone when attaching. */
+    var filesAllowed by mutableStateOf(true)
+        private set
+
     fun refresh(context: Context) {
+        filesAllowed = FileScanner.hasAccess()
         notificationsAllowed = Build.VERSION.SDK_INT < 33 ||
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
     }
@@ -82,13 +88,10 @@ const val BACKUP_PICKER_HELP =
     "In the next screen, go to the folder where backups should be kept (use the menu at the top left to switch between this phone, Google " +
         "Drive, OneDrive...), then tap \"Use this folder\" and Allow. The very top of a drive can't be used."
 
-/** The three alert banners' colours: light red (permissions), light orange (settings), light green (updates), with a dark variant. */
+/** The three alert banners' colours: light red (permissions), light green (updates), with a dark variant. */
 object BannerColors {
     @Composable
     fun permission(): Color = if (isSystemInDarkTheme()) Color(0xFF5C2B29) else Color(0xFFFFDAD6)
-
-    @Composable
-    fun settings(): Color = if (isSystemInDarkTheme()) Color(0xFF5A3B13) else Color(0xFFFFE2BF)
 
     @Composable
     fun update(): Color = if (isSystemInDarkTheme()) Color(0xFF1F4A2A) else Color(0xFFD6F0D0)
@@ -104,9 +107,10 @@ object BannerColors {
 @Composable
 fun PermissionAlertBanner() {
     val context = LocalContext.current
-    val needInstall = Updater.isConfigured && !Updater.installAllowed
+    val needInstall = !Updater.installAllowed
     val needNotifications = !PermissionStatus.notificationsAllowed
-    if (!needInstall && !needNotifications) return
+    val needFiles = !PermissionStatus.filesAllowed
+    if (!needInstall && !needNotifications && !needFiles) return
 
     val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         PermissionStatus.refresh(context)
@@ -117,6 +121,12 @@ fun PermissionAlertBanner() {
             Text("Let Water Splitter install its own updates.")
             Button(onClick = { context.startActivity(Updater.allowInstallIntent(context)) }, modifier = Modifier.fillMaxWidth()) {
                 Text("Allow installing updates")
+            }
+        }
+        if (needFiles) {
+            Text("Let Water Splitter find the invoice PDF and meter photo on this phone.")
+            Button(onClick = { context.startActivity(FileScanner.accessIntent(context)) }, modifier = Modifier.fillMaxWidth()) {
+                Text("Allow access to files")
             }
         }
         if (needNotifications) {
@@ -133,29 +143,5 @@ fun PermissionAlertBanner() {
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("Allow notifications") }
         }
-    }
-}
-
-/**
- * The settings alert banner (light orange): the backup location has not been decided yet. It says where backups go by default and
- * can be ignored, which makes it go away.
- */
-@Composable
-fun SettingsAlertBanner() {
-    val context = LocalContext.current
-    if (BackupLocation.choiceMade) return
-    var problem by remember { mutableStateOf<String?>(null) }
-    val chooseLocation = rememberBackupLocationPicker { problem = it }
-    Panel(container = BannerColors.settings(), contentColor = BannerColors.text()) {
-        SectionTitle("Backup location")
-        Text(
-            "If you don't choose a location, your backups are kept in ${BackupLocation.DEFAULT_LABEL}. " +
-                "Choose another folder, for example in Google Drive or OneDrive, to keep them somewhere else.",
-        )
-        Button(onClick = chooseLocation, modifier = Modifier.fillMaxWidth()) { Text("Choose backup location") }
-        TextButton(onClick = { BackupLocation.useDefault(context) }, modifier = Modifier.fillMaxWidth()) {
-            Text("Ignore - keep the default location", fontWeight = FontWeight.Normal)
-        }
-        problem?.let { Text(it, color = MaterialTheme.colorScheme.error) }
     }
 }

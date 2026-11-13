@@ -112,7 +112,7 @@ object Previews {
 }
 
 @Composable
-private fun rememberPages(file: File, mime: String, width: Int, maxPages: Int): State<List<Bitmap>?> =
+internal fun rememberPages(file: File, mime: String, width: Int, maxPages: Int): State<List<Bitmap>?> =
     produceState<List<Bitmap>?>(null, file, mime, width, maxPages) {
         value = withContext(Dispatchers.IO) { Previews.load(file, mime, width, maxPages) }
     }

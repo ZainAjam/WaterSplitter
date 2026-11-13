@@ -7,6 +7,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import za.westend.watersplit.data.BackupLocation
+import za.westend.watersplit.data.Packages
 import za.westend.watersplit.ui.PermissionStatus
 import za.westend.watersplit.data.Store
 import za.westend.watersplit.reading.ReaderService
@@ -57,6 +58,32 @@ class MainActivity : ComponentActivity() {
 
     private fun handleShare(intent: Intent?) {
         if (intent == null) return
+        val app = applicationContext
+        // A tapped .wsbackup / .wsmonths file (or one shared to the app): look inside, whatever it is called.
+        val single = when (intent.action) {
+            Intent.ACTION_VIEW -> intent.data
+            Intent.ACTION_SEND -> androidx.core.content.IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, android.net.Uri::class.java)
+            else -> null
+        }
+        if (single != null) {
+            val viewing = intent.action == Intent.ACTION_VIEW
+            thread {
+                val pkg = Packages.receive(app, single)
+                runOnUiThread {
+                    when {
+                        pkg != null -> inbox.pending = pkg
+                        viewing -> Toast.makeText(this, "That file can't be opened by Water Splitter.", Toast.LENGTH_LONG).show()
+                        else -> handleShareFiles(intent)
+                    }
+                }
+            }
+            setIntent(Intent(this, MainActivity::class.java))
+            return
+        }
+        handleShareFiles(intent)
+    }
+
+    private fun handleShareFiles(intent: Intent) {
         if (intent.action != Intent.ACTION_SEND && intent.action != Intent.ACTION_SEND_MULTIPLE) return
         val app = applicationContext
         // Copy on a background thread: the sender's content URI may be slow to open.

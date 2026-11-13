@@ -31,6 +31,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import za.westend.watersplit.share.FileScanner
 import za.westend.watersplit.update.Updater
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -167,7 +168,7 @@ fun SetupScreen(
         when (step) {
             0 -> {
                 Text(
-                    "Two quick permissions. Water Splitter updates itself from the internet, and it can remind you when the invoice is due.",
+                    "Three quick permissions. Water Splitter updates itself from the internet, it can remind you when the invoice is due, and it finds the invoice and meter photo on this phone for you.",
                     style = MaterialTheme.typography.bodyLarge,
                 )
                 Panel {
@@ -209,7 +210,22 @@ fun SetupScreen(
                         ) { Text(if (notificationsAsked) "Open notification settings" else "Allow notifications") }
                     }
                 }
-                val allDone = Updater.installAllowed && notificationsAllowed
+                Panel {
+                    SectionTitle("Allow access to files")
+                    if (PermissionStatus.filesAllowed) {
+                        Text("✓ Access to files is allowed.", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                    } else {
+                        Text("So the app can list the invoice PDFs and meter photos saved on this phone, and you just pick one.")
+                        Text("1. Tap the button below.")
+                        Text("2. Switch on \"Allow access to manage all files\".")
+                        Text("3. Press Back to return here.")
+                        Button(
+                            onClick = { context.startActivity(FileScanner.accessIntent(context)) },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text("Allow access to files") }
+                    }
+                }
+                val allDone = Updater.installAllowed && notificationsAllowed && PermissionStatus.filesAllowed
                 if (allDone) {
                     Button(onClick = { onStep(1) }, modifier = Modifier.fillMaxWidth().height(56.dp)) {
                         Text("Next", style = MaterialTheme.typography.titleMedium)
@@ -217,7 +233,7 @@ fun SetupScreen(
                 } else {
                     SkipButton("Skip for now") { onStep(1) }
                     Text(
-                        "A reminder stays at the top of the main screen until updates are allowed.",
+                        "A reminder stays at the top of the main screen until these are allowed.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

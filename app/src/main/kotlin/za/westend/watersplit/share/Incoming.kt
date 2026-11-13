@@ -4,7 +4,9 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.setValue
 import androidx.core.content.IntentCompat
 import java.io.File
 import java.util.UUID
@@ -15,6 +17,9 @@ data class SharedItem(val file: File, val mime: String, val displayName: String)
 /** Files waiting for the person to say what they are and which month they belong to. */
 class ShareInbox {
     val items = mutableStateListOf<SharedItem>()
+
+    /** A .wsbackup or .wsmonths file somebody opened with this app, waiting for the person to confirm. */
+    var pending by androidx.compose.runtime.mutableStateOf<za.westend.watersplit.data.PendingPackage?>(null)
 }
 
 object Incoming {
