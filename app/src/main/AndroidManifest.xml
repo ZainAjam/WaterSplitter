@@ -71,6 +71,22 @@
                 <data android:pathPattern=".*\\..*\\.wsmonths" />
                 <data android:pathPattern=".*\\..*\\..*\\.wsmonths" />
             </intent-filter>
+            <!-- File managers (Samsung My Files, Google Files) often open an unknown extension with NO type at all, and an intent
+                 without a type never matches a filter that declares one: same patterns, no mimeType, no host. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:host="*" />
+                <data android:pathPattern=".*\\.wsbackup" />
+                <data android:pathPattern=".*\\..*\\.wsbackup" />
+                <data android:pathPattern=".*\\..*\\..*\\.wsbackup" />
+                <data android:pathPattern=".*\\.wsmonths" />
+                <data android:pathPattern=".*\\..*\\.wsmonths" />
+                <data android:pathPattern=".*\\..*\\..*\\.wsmonths" />
+            </intent-filter>
             <!-- The same files when the sender gives them a type of its own, or no readable name. -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
